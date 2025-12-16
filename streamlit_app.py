@@ -3,44 +3,56 @@ from PIL import Image
 import google.generativeai as genai
 import time
 import base64
+import json
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
-    page_title="관상가 아솔",
+    page_title="🧙‍♂️ 관상가 아솔 - 조선 팔도 최고의 관상",
     page_icon="🧙‍♂️",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# --- 1-1. 링크 미리보기 메타 태그 추가 ---
-st.markdown("""
-<head>
-    <!-- Open Graph 메타 태그 (카카오톡, 페이스북 미리보기) -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="🧙‍♂️ 관상가 아솔 - 조선 팔도 최고의 관상">
-    <meta property="og:description" content="AI가 당신의 얼굴을 보고 초년운, 재물운, 애정운을 상세하게 풀어드립니다. 지금 바로 관상을 봐보시오!">
-    <meta property="og:image" content="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
-    <meta property="og:url" content="https://gwangsangapp.streamlit.app/">
-    <meta property="og:site_name" content="관상가 아솔">
+# --- 2. 메타 태그 주입 (Open Graph, Twitter Card) ---
+st.components.v1.html("""
+<script>
+(function() {
+    var metaTags = [
+        {property: 'og:type', content: 'website'},
+        {property: 'og:title', content: '🧙‍♂️ 관상가 아솔 - 조선 팔도 최고의 관상'},
+        {property: 'og:description', content: 'AI가 당신의 얼굴을 보고 초년운, 재물운, 애정운을 상세하게 풀어드립니다. 지금 바로 관상을 봐보시오!'},
+        {property: 'og:image', content: 'https://em-content.zobj.net/source/apple/391/mage_1f9d9.png'},
+        {property: 'og:url', content: 'https://gwangsangapp.streamlit.app/'},
+        {property: 'og:site_name', content: '관상가 아솔'},
+        {name: 'twitter:card', content: 'summary_large_image'},
+        {name: 'twitter:title', content: '🧙‍♂️ 관상가 아솔'},
+        {name: 'twitter:description', content: 'AI가 당신의 관상을 봐드립니다'},
+        {name: 'twitter:image', content: 'https://em-content.zobj.net/source/apple/391/mage_1f9d9.png'},
+        {name: 'description', content: 'AI 관상가 아솔이 당신의 얼굴을 보고 초년운, 재물운, 애정운을 재미있게 풀어드립니다.'},
+        {name: 'keywords', content: '관상, AI관상, 관상보기, 얼굴운세, 무료관상, 아솔'},
+        {name: 'author', content: '관상가 아솔'}
+    ];
     
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="🧙‍♂️ 관상가 아솔">
-    <meta name="twitter:description" content="AI가 당신의 관상을 봐드립니다">
-    <meta name="twitter:image" content="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
-    
-    <!-- 기본 메타 태그 -->
-    <meta name="description" content="AI 관상가 아솔이 당신의 얼굴을 보고 초년운, 재물운, 애정운을 재미있게 풀어드립니다.">
-    <meta name="keywords" content="관상, AI관상, 관상보기, 얼굴운세, 무료관상, 아솔">
-    <meta name="author" content="관상가 아솔">
-    
-    <!-- 파비콘 -->
-    <link rel="icon" href="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
-</head>
-""", unsafe_allow_html=True)
+    try {
+        var head = window.parent.document.head;
+        metaTags.forEach(function(tag) {
+            var meta = window.parent.document.createElement('meta');
+            if (tag.property) {
+                meta.setAttribute('property', tag.property);
+            } else if (tag.name) {
+                meta.setAttribute('name', tag.name);
+            }
+            meta.setAttribute('content', tag.content);
+            head.appendChild(meta);
+        });
+    } catch(e) {
+        console.log('메타 태그 주입 실패:', e);
+    }
+})();
+</script>
+""", height=0)
 
-# --- 2. [핵심] 인앱 브라우저 차단 (최상단에 즉시 실행) ---
-# height를 1로 설정하고 즉시 실행되도록 수정
+# --- 3. 인앱 브라우저 차단 (카카오톡, 인스타그램 등) ---
 st.components.v1.html("""
 <!DOCTYPE html>
 <html>
@@ -53,11 +65,10 @@ st.components.v1.html("""
 (function() {
     'use strict';
     
-    // 즉시 실행
     var ua = navigator.userAgent.toLowerCase();
     var href = window.top.location.href || window.location.href;
     
-    // 인앱 브라우저 패턴 (더 정확한 감지)
+    // 인앱 브라우저 패턴
     var inAppPatterns = [
         'kakao',
         'kakaotalk',
@@ -86,7 +97,6 @@ st.components.v1.html("""
     }
     
     if (isInApp) {
-        // 부모 window에 메시지 전송
         if (window.parent) {
             window.parent.postMessage({
                 type: 'IN_APP_BROWSER_DETECTED',
@@ -95,12 +105,10 @@ st.components.v1.html("""
             }, '*');
         }
         
-        // Android: Chrome으로 리다이렉트 시도
         if (ua.indexOf('android') > -1) {
             var intentUrl = 'intent://' + href.replace(/https?:\\/\\//, '') + 
                           '#Intent;scheme=https;package=com.android.chrome;end';
             
-            // top window에서 리다이렉트
             try {
                 window.top.location.href = intentUrl;
             } catch(e) {
@@ -114,12 +122,11 @@ st.components.v1.html("""
 </html>
 """, height=1)
 
-# --- 3. 추가 차단 레이어 (Streamlit 메인 영역) ---
+# --- 4. 인앱 브라우저 차단 화면 표시 ---
 st.markdown("""
 <script>
 window.addEventListener('message', function(event) {
     if (event.data.type === 'IN_APP_BROWSER_DETECTED') {
-        // 인앱 브라우저 감지됨 - 전체 화면 차단
         document.body.innerHTML = '';
         showBlockScreen(event.data.url, event.data.userAgent);
     }
@@ -275,7 +282,7 @@ function showBlockScreen(currentUrl, userAgent) {
         
         <script>
             function openInChrome() {
-                var intentUrl = 'intent://' + '${currentUrl}'.replace(/https?:\\/\\//, '') + 
+                var intentUrl = 'intent://' + '${currentUrl}'.replace(/https?:\\\\/\\\\//, '') + 
                               '#Intent;scheme=https;package=com.android.chrome;end';
                 window.location.href = intentUrl;
                 
@@ -323,7 +330,7 @@ function showBlockScreen(currentUrl, userAgent) {
 </script>
 """, unsafe_allow_html=True)
 
-# --- 4. PWA 지원 ---
+# --- 5. PWA 지원 ---
 def add_pwa_support():
     manifest = {
         "name": "관상가 아솔",
@@ -341,7 +348,6 @@ def add_pwa_support():
         }]
     }
     
-    import json
     manifest_json = json.dumps(manifest)
     
     pwa_html = f"""
@@ -355,7 +361,7 @@ def add_pwa_support():
 
 add_pwa_support()
 
-# --- 5. 스타일 ---
+# --- 6. 스타일 ---
 st.markdown("""
     <style>
     .stButton>button {
@@ -366,6 +372,12 @@ st.markdown("""
         font-weight: bold;
         border-radius: 10px;
         padding: 12px;
+        transition: all 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #5D3A3A;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(125, 90, 90, 0.4);
     }
     div.row-widget.stRadio > div {
         flex-direction: row;
@@ -377,18 +389,25 @@ st.markdown("""
         font-family: 'Helvetica', sans-serif;
         color: #333;
     }
+    /* 카메라/업로드 위젯 스타일 */
+    [data-testid="stCameraInput"], [data-testid="stFileUploader"] {
+        border: 2px dashed #7D5A5A;
+        border-radius: 10px;
+        padding: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 6. API 키 ---
+# --- 7. API 키 설정 ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 except:
-    st.error("🚨 API 키 설정을 확인하시오.")
+    st.error("🚨 API 키 설정을 확인하시오. `.streamlit/secrets.toml` 파일에 GOOGLE_API_KEY를 추가해야 합니다.")
     st.stop()
 
-# --- 7. 장군신 함수들 ---
+# --- 8. 장군신(AI 모델) 함수들 ---
 def get_all_available_models():
+    """사용 가능한 모든 Gemini 모델 목록 가져오기"""
     try:
         all_models = []
         for model_info in genai.list_models():
@@ -396,9 +415,10 @@ def get_all_available_models():
                 all_models.append(model_info.name)
         return all_models
     except:
-        return ['gemini-1.5-flash', 'gemini-1.5-pro', 'models/gemini-1.5-flash']
+        return ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-2.0-flash-exp']
 
 def try_model_with_image(model_name, prompt, image):
+    """특정 모델로 이미지 분석 시도"""
     try:
         model = genai.GenerativeModel(model_name)
         response = model.generate_content([prompt, image])
@@ -412,44 +432,54 @@ def try_model_with_image(model_name, prompt, image):
         else:
             return None, error_msg
 
-# --- 8. 세션 초기화 ---
+# --- 9. 세션 초기화 ---
 if 'final_image' not in st.session_state:
     st.session_state.final_image = None
+if 'last_result' not in st.session_state:
+    st.session_state.last_result = None
+if 'last_model' not in st.session_state:
+    st.session_state.last_model = None
 
-# --- 9. 메인 UI ---
+# --- 10. 메인 UI ---
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가</p>", unsafe_allow_html=True)
 st.write("---")
 
+# 사진 입력 방식 선택
 input_method = st.radio(
     "사진 준비 방식을 선택하시오:",
     ("📸 직접 촬영", "📂 앨범 선택"),
     horizontal=True
 )
 
+# 사진 입력
 if input_method == "📸 직접 촬영":
-    camera_image = st.camera_input("촬영", label_visibility="collapsed")
+    camera_image = st.camera_input("📸 얼굴을 화면에 담으시오", label_visibility="visible")
     if camera_image:
         st.session_state.final_image = camera_image
+        
 elif input_method == "📂 앨범 선택":
-    uploaded_file = st.file_uploader("업로드", type=['jpg', 'jpeg', 'png'], label_visibility="collapsed")
+    uploaded_file = st.file_uploader("📂 사진을 선택하시오", type=['jpg', 'jpeg', 'png'], label_visibility="visible")
     if uploaded_file:
         st.session_state.final_image = uploaded_file
 
-# --- 10. 분석 로직 ---
+# --- 11. 관상 분석 로직 ---
 if st.session_state.final_image:
     st.write("---")
-    st.image(st.session_state.final_image, caption="선택된 얼굴", use_container_width=True)
+    st.image(st.session_state.final_image, caption="✅ 선택된 얼굴", use_container_width=True)
 
-    if st.button("🔮 아솔에게 관상 묻기"):
+    if st.button("🔮 아솔에게 관상 묻기", type="primary"):
         try:
             progress_bar = st.progress(0)
             status_text = st.empty()
 
+            # 1단계: 장군신 찾기
             status_text.markdown("### 📡 당직 서는 장군신을 찾는 중이오...")
             progress_bar.progress(5)
             
             available_models = get_all_available_models()
 
+            # 2단계: 관상 분석 프로세스 시뮬레이션
             analysis_steps = [
                 "1단계: 이마의 넓이와 초년운 측정 중...",
                 "2단계: 눈썹의 기세와 형제운 분석 중...",
@@ -463,20 +493,38 @@ if st.session_state.final_image:
                 progress_bar.progress(5 + (i + 1) * 15)
                 time.sleep(1.0)
 
+            # 3단계: AI 프롬프트
             prompt = """
-            당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
-            이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 아주 상세하고 재미있게 봐주세요.
-            말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오")을 사용하세요.
+당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
+이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 아주 상세하고 재미있게 봐주세요.
+말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려")을 사용하세요.
+
+[아솔의 감정서 양식]
+
+🎭 **인상 총평**
+- 첫인상과 전체적인 기운
+- 삼정(초년, 중년, 말년) 운세
+
+💰 **재물운**
+- 코와 광대뼈로 보는 재물 축적 능력
+- 돈을 모으는 스타일과 시기
+
+❤️ **연애 및 애정운**
+- 눈매와 입술로 보는 이성운
+- 도화살 유무와 연애 스타일
+
+🍀 **아솔의 특별 처방**
+- 주의해야 할 점
+- 운을 더 높이는 방법
+
+**중요한 점:**
+- 구체적인 세부사항을 언급하며 신빙성을 높이세요
+- 긍정적이면서도 현실적인 조언을 섞으세요
+- 이모티콘과 강조 문법(**굵게**, *이탤릭*)을 적절히 사용하세요
+- 재미있고 읽기 쉽게 작성하되, 너무 짧지 않게 충분히 상세하게 써주세요
+"""
             
-            [아솔의 감정서]
-            1. 🎭 인상 총평 (초년, 중년, 말년)
-            2. 💰 재물운 (곳간이 찰 상인가?)
-            3. ❤️ 연애 및 애정운 (도화살 유무)
-            4. 🍀 아솔의 특별 처방 (조언)
-            
-            재미있게 팩트 폭격을 섞어서 신통방통하게 말해주세요.
-            """
-            
+            # 4단계: 이미지 열기 및 모델 시도
             image = Image.open(st.session_state.final_image)
             response = None
             successful_model = None
@@ -492,11 +540,14 @@ if st.session_state.final_image:
                     successful_model = display_name
                     break
                 elif error == "quota_exceeded":
-                    status_text.markdown(f"### 💤 {display_name} 장군신이 휴식 중...")
+                    status_text.markdown(f"### 💤 {display_name} 장군신이 휴식 중... 다음 장군신 호출 중...")
                     time.sleep(0.8)
             
+            # 5단계: 결과 처리
             if response is None:
                 st.error("⚠️ 모든 장군신이 휴식 중입니다. 잠시 후 다시 시도해주세요.")
+                progress_bar.empty()
+                status_text.empty()
                 st.stop()
             
             status_text.markdown(f"### ✅ **{successful_model}** 장군신이 감정서를 작성했소!")
@@ -506,15 +557,18 @@ if st.session_state.final_image:
             progress_bar.empty()
             status_text.empty()
             
-            # 결과 저장 (세션 상태에 저장)
+            # 결과 저장
             st.session_state.last_result = response.text
             st.session_state.last_model = successful_model
             
+            # 결과 표시
             st.write("---")
-            st.subheader(f"📜 아솔의 관상 풀이 (by {successful_model} 장군신)")
+            st.subheader(f"📜 아솔의 관상 풀이")
+            st.caption(f"*by {successful_model} 장군신*")
             st.markdown(response.text)
             
-            # 복사 버튼 추가
+            # 복사 버튼
+            result_text_escaped = response.text.replace('`', '').replace('"', '\\"').replace('\n', '\\n')
             st.components.v1.html(f"""
             <div style="margin: 30px 0; text-align: center;">
                 <button onclick="copyResult()" style="
@@ -547,7 +601,7 @@ if st.session_state.final_image:
             
             <script>
                 function copyResult() {{
-                    var resultText = `📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{response.text.replace('`', '').replace('"', '\\"')}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp.streamlit.app/`;
+                    var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp.streamlit.app/";
                     
                     var messageDiv = document.getElementById('copy-result-msg');
                     var button = event.target;
@@ -618,13 +672,18 @@ if st.session_state.final_image:
             st.balloons()
 
         except Exception as e:
-            st.error(f"예기치 못한 에러가 났소. (내용: {e})")
+            st.error(f"⚠️ 예기치 못한 에러가 났소. (내용: {e})")
+            progress_bar.empty()
+            status_text.empty()
 
-# --- 11. 하단 안내 ---
+# --- 12. 하단 안내 및 푸터 ---
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
     <p>🔒 <b>개인정보 보호:</b> 모든 사진은 분석 후 즉시 삭제됩니다.</p>
-    <p>🧙‍♂️ 관상가 아솔 © 2024</p>
+    <p>🎲 <b>엔터테인먼트 목적:</b> 본 서비스는 재미를 위한 것으로, 실제 운세와 무관합니다.</p>
+    <p style="margin-top: 20px; color: #999; font-size: 12px;">
+        🧙‍♂️ 관상가 아솔 © 2024 | Powered by Google Gemini AI
+    </p>
 </div>
 """, unsafe_allow_html=True)
