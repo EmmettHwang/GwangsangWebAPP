@@ -12,15 +12,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. PWA 매니페스트 및 Service Worker 추가 ---
-def add_pwa_support():
-    """PWA 설치 지원 (홈 화면 추가 가능)"""
+# --- 2. PWA 매니페스트 및 홈 화면 추가 기능 ---
+def add_pwa_and_install_button():
+    """PWA 지원 + 홈 화면 추가 버튼"""
     
-    # manifest.json 내용
     manifest = {
         "name": "관상가 아솔",
         "short_name": "아솔",
-        "description": "조선 팔도 최고의 관상가 아솔이 당신의 운명을 풀어드립니다",
+        "description": "조선 팔도 최고의 관상가 아솔",
         "start_url": "/",
         "display": "standalone",
         "background_color": "#ffffff",
@@ -30,7 +29,8 @@ def add_pwa_support():
             {
                 "src": "https://em-content.zobj.net/source/apple/391/mage_1f9d9.png",
                 "sizes": "192x192",
-                "type": "image/png"
+                "type": "image/png",
+                "purpose": "any maskable"
             },
             {
                 "src": "https://em-content.zobj.net/source/apple/391/mage_1f9d9.png",
@@ -43,18 +43,6 @@ def add_pwa_support():
     import json
     manifest_json = json.dumps(manifest)
     
-    # Service Worker (오프라인 지원)
-    service_worker = """
-    self.addEventListener('install', (event) => {
-        console.log('Service Worker 설치됨');
-    });
-    
-    self.addEventListener('fetch', (event) => {
-        event.respondWith(fetch(event.request));
-    });
-    """
-    
-    # HTML에 PWA 메타태그 및 스크립트 삽입
     pwa_html = f"""
     <head>
         <link rel="manifest" href="data:application/json;base64,{base64.b64encode(manifest_json.encode()).decode()}">
@@ -67,118 +55,172 @@ def add_pwa_support():
     </head>
     
     <script>
-        // Service Worker 등록
-        if ('serviceWorker' in navigator) {{
-            navigator.serviceWorker.register('data:text/javascript;base64,{base64.b64encode(service_worker.encode()).decode()}')
-                .then(reg => console.log('Service Worker 등록 성공'))
-                .catch(err => console.log('Service Worker 등록 실패:', err));
-        }}
-        
-        // PWA 설치 프롬프트
+        // PWA 설치 프롬프트 저장
         let deferredPrompt;
+        
         window.addEventListener('beforeinstallprompt', (e) => {{
             e.preventDefault();
             deferredPrompt = e;
             
-            // 설치 안내 배너 표시
-            const installBanner = document.createElement('div');
-            installBanner.innerHTML = `
-                <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); 
-                            background: #7D5A5A; color: white; padding: 15px 25px; border-radius: 10px; 
-                            box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 9999; text-align: center;
-                            max-width: 90%; font-family: sans-serif;">
-                    <div style="margin-bottom: 10px;">📱 홈 화면에 '아솔'을 추가하시겠소?</div>
-                    <button id="installBtn" style="background: white; color: #7D5A5A; border: none; 
-                            padding: 8px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; margin-right: 10px;">
-                        추가하기
-                    </button>
-                    <button id="dismissBtn" style="background: transparent; color: white; border: 1px solid white; 
-                            padding: 8px 20px; border-radius: 5px; cursor: pointer;">
-                        나중에
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(installBanner);
-            
-            // 설치 버튼 클릭 시
-            document.getElementById('installBtn').addEventListener('click', () => {{
+            // 설치 버튼 표시
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) {{
+                installBtn.style.display = 'block';
+            }}
+        }});
+        
+        // 설치 버튼 클릭 핸들러
+        function installPWA() {{
+            if (deferredPrompt) {{
                 deferredPrompt.prompt();
                 deferredPrompt.userChoice.then((choiceResult) => {{
                     if (choiceResult.outcome === 'accepted') {{
-                        console.log('사용자가 PWA 설치 동의');
+                        console.log('PWA 설치 승인됨');
+                        showInstallSuccess();
+                    }} else {{
+                        console.log('PWA 설치 거부됨');
                     }}
                     deferredPrompt = null;
-                    installBanner.remove();
+                    
+                    // 설치 버튼 숨기기
+                    const installBtn = document.getElementById('pwa-install-btn');
+                    if (installBtn) {{
+                        installBtn.style.display = 'none';
+                    }}
                 }});
-            }});
-            
-            // 나중에 버튼 클릭 시
-            document.getElementById('dismissBtn').addEventListener('click', () => {{
-                installBanner.remove();
-            }});
-        }});
+            }} else {{
+                // PWA 설치 불가능한 경우 (이미 설치됨 또는 지원 안 함)
+                showInstallGuide();
+            }}
+        }}
         
-        // 카메라 권한 사전 요청 (Chrome 최적화)
-        window.addEventListener('load', () => {{
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {{
-                // 페이지 로드 시 카메라 권한 체크 (실제 스트림은 시작 안 함)
-                console.log('카메라 API 사용 가능');
+        function showInstallSuccess() {{
+            alert('✅ 설치 완료! 홈 화면에서 "아솔" 아이콘을 찾아보세요.');
+        }}
+        
+        function showInstallGuide() {{
+            const userAgent = navigator.userAgent.toLowerCase();
+            let message = '';
+            
+            if (/iphone|ipad/.test(userAgent)) {{
+                message = '📱 iOS 설치 방법:\\n\\n1. 하단 공유 버튼 (□↑) 클릭\\n2. "홈 화면에 추가" 선택\\n3. "추가" 클릭';
+            }} else if (/android/.test(userAgent)) {{
+                message = '📱 Android 설치 방법:\\n\\n1. 우측 상단 ⋮ 메뉴 클릭\\n2. "홈 화면에 추가" 또는 "앱 설치" 선택';
+            }} else {{
+                message = '💡 모바일 브라우저(Chrome/Safari)에서 접속하면\\n홈 화면에 추가할 수 있습니다!';
+            }}
+            
+            alert(message);
+        }}
+        
+        // 이미 설치된 경우 버튼 숨기기
+        window.addEventListener('appinstalled', () => {{
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) {{
+                installBtn.style.display = 'none';
             }}
         }});
+        
+        // 스탠드얼론 모드에서 실행 중인지 확인
+        if (window.matchMedia('(display-mode: standalone)').matches) {{
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) {{
+                installBtn.style.display = 'none';
+            }}
+        }}
     </script>
     """
     
     st.components.v1.html(pwa_html, height=0)
 
-# PWA 지원 활성화
-add_pwa_support()
+# PWA 지원 추가
+add_pwa_and_install_button()
 
-# --- 3. [업그레이드] 인앱 브라우저 차단 + Chrome 권장 ---
+# --- 3. 인앱 브라우저 차단 ---
 st.components.v1.html("""
 <script>
     var userAgent = navigator.userAgent.toLowerCase();
+    var currentUrl = window.location.href;
+    
     var isInApp = userAgent.indexOf("kakao") > -1 || 
                   userAgent.indexOf("instagram") > -1 || 
                   userAgent.indexOf("line") > -1 ||
-                  userAgent.indexOf("fban") > -1 ||  // Facebook
-                  userAgent.indexOf("fbav") > -1;    // Facebook
-    
-    var isChrome = userAgent.indexOf("chrome") > -1 && userAgent.indexOf("edg") === -1;
+                  userAgent.indexOf("fban") > -1 ||
+                  userAgent.indexOf("fbav") > -1 ||
+                  userAgent.indexOf("naver") > -1;
     
     if (isInApp) {
+        if (/android/i.test(userAgent)) {
+            var deeplink = 'intent://' + currentUrl.replace(/https?:\\/\\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+            window.location.href = deeplink;
+            setTimeout(showWarning, 500);
+        } else {
+            showWarning();
+        }
+    }
+    
+    function showWarning() {
         document.body.innerHTML = `
             <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-                        background-color: #fff; z-index: 9999; display: flex; 
-                        flex-direction: column; justify-content: center; align-items: center; 
-                        text-align: center; font-family: sans-serif; padding: 20px;">
-                <h1 style="color: #d32f2f; margin-bottom: 20px;">⛔️ 접속 불가</h1>
-                <p style="font-size: 18px; line-height: 1.8; color: #333;">
-                    죄송하오. <b>인앱 브라우저</b>에서는 카메라가 작동하지 않소.<br><br>
-                    <span style="background: #fff3cd; padding: 5px 10px; border-radius: 5px; display: inline-block; margin: 10px 0;">
-                        📱 우측 상단 점 3개 <b>(...)</b> 클릭<br>
-                        → <b>[Chrome으로 열기]</b> 또는 <b>[Safari로 열기]</b> 선택
-                    </span>
-                </p>
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        z-index: 99999; display: flex; justify-content: center; align-items: center; 
+                        padding: 20px; font-family: -apple-system, sans-serif;">
+                
+                <div style="background: white; padding: 40px 30px; border-radius: 20px; 
+                            max-width: 400px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+                    
+                    <div style="font-size: 60px; margin-bottom: 20px;">📱</div>
+                    
+                    <h1 style="color: #d32f2f; margin-bottom: 15px; font-size: 22px;">
+                        외부 브라우저에서 열어주세요
+                    </h1>
+                    
+                    <p style="font-size: 15px; line-height: 1.6; color: #666; margin-bottom: 25px;">
+                        카메라 기능을 사용하려면<br>
+                        <b>Chrome</b> 또는 <b>Safari</b>로 열어야 합니다
+                    </p>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; 
+                                text-align: left; margin-bottom: 20px;">
+                        <div style="font-weight: bold; margin-bottom: 10px; color: #333;">
+                            📋 여는 방법:
+                        </div>
+                        <ol style="margin: 0; padding-left: 20px; color: #666; font-size: 14px; line-height: 1.8;">
+                            <li>우측 상단 <b>⋮</b> 또는 <b>공유</b> 버튼</li>
+                            <li><b>"Chrome으로 열기"</b> 선택</li>
+                            <li>카메라 권한 허용</li>
+                        </ol>
+                    </div>
+                    
+                    <button onclick="copyUrl()" style="width: 100%; background: #7D5A5A; color: white; 
+                            border: none; padding: 15px; border-radius: 10px; font-size: 15px; 
+                            font-weight: bold; cursor: pointer;">
+                        주소 복사하기
+                    </button>
+                    
+                    <div id="msg" style="color: #28a745; margin-top: 10px; height: 20px; font-size: 14px;"></div>
+                </div>
             </div>
+            
+            <script>
+                function copyUrl() {
+                    var url = '${currentUrl}';
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url).then(() => {
+                            document.getElementById('msg').textContent = '✅ 복사 완료!';
+                            setTimeout(() => document.getElementById('msg').textContent = '', 2000);
+                        });
+                    }
+                }
+            </script>
         `;
-    } else if (!isChrome && /mobile|android/i.test(userAgent)) {
-        // 모바일인데 Chrome이 아닐 경우 권장 메시지
-        var banner = document.createElement('div');
-        banner.innerHTML = `
-            <div style="background: #fff3cd; color: #856404; padding: 12px; text-align: center; 
-                        font-size: 14px; border-bottom: 2px solid #ffc107; font-family: sans-serif;">
-                💡 <b>Chrome 브라우저</b>에서 가장 안정적으로 작동합니다!
-            </div>
-        `;
-        document.body.insertBefore(banner, document.body.firstChild);
     }
 </script>
 """, height=0)
 
-# --- 4. 스타일 꾸미기 ---
+# --- 4. 스타일 ---
 st.markdown("""
     <style>
-    /* 기본 스타일 */
     .stButton>button {
         width: 100%; 
         margin-top: 10px; 
@@ -199,11 +241,30 @@ st.markdown("""
         color: #333; 
     }
     
-    /* PWA 모드일 때 상단 여백 조정 */
-    @media all and (display-mode: standalone) {
-        .main { 
-            padding-top: 2rem; 
-        }
+    /* 홈 화면 추가 버튼 스타일 */
+    #pwa-install-btn {
+        display: none;
+        width: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    
+    #pwa-install-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+    }
+    
+    #pwa-install-btn:active {
+        transform: translateY(0);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -215,9 +276,8 @@ except:
     st.error("🚨 API 키 설정을 확인하시오.")
     st.stop()
 
-# --- 6. [핵심] 장군신 자동 로테이션 시스템 ---
+# --- 6. 장군신 함수들 (이전과 동일) ---
 def get_all_available_models():
-    """사용 가능한 모든 장군신 목록 가져오기"""
     try:
         all_models = []
         for model_info in genai.list_models():
@@ -236,7 +296,6 @@ def get_all_available_models():
         ]
 
 def try_model_with_image(model_name, prompt, image):
-    """특정 장군신으로 관상 시도"""
     try:
         model = genai.GenerativeModel(model_name)
         response = model.generate_content([prompt, image])
@@ -257,12 +316,11 @@ if 'final_image' not in st.session_state:
 # --- 8. 화면 구성 ---
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
 
-# PWA 설치 안내 (선택적)
+# 💡 홈 화면 추가 버튼 (핵심!)
 st.markdown("""
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
-    💡 <b>팁:</b> 홈 화면에 추가하면 앱처럼 빠르게 접속할 수 있소!
-</div>
+<button id="pwa-install-btn" onclick="installPWA()">
+    💡 홈 화면에 추가하면 앱처럼 빠르게 접속할 수 있소!
+</button>
 """, unsafe_allow_html=True)
 
 st.write("---")
@@ -282,7 +340,7 @@ elif input_method == "📂 앨범 선택":
     if uploaded_file: 
         st.session_state.final_image = uploaded_file
 
-# --- 9. 분석 및 실행 로직 ---
+# --- 9. 분석 로직 (이전과 동일) ---
 if st.session_state.final_image:
     st.write("---")
     st.image(st.session_state.final_image, caption="선택된 얼굴", use_container_width=True)
@@ -374,7 +432,6 @@ if st.session_state.final_image:
 
         except Exception as e:
             st.error(f"예기치 못한 에러가 났소. (내용: {e})")
-            st.info("💡 네트워크 연결을 확인하거나, 잠시 후 다시 시도해주시오.")
 
 # --- 10. 하단 안내 ---
 st.markdown("---")
