@@ -1,4 +1,4 @@
-sstreamlit
+streamlit
 google-generativeai
 Pillow
 mediapipe
