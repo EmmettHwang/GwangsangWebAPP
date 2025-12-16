@@ -1,5 +1,8 @@
 # 1. 깃 초기화 (이미 했다면 생략 가능하지만 해도 상관없음)
 git init
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+git branch -M main
 
 # 2. 방금 만든 GitHub 주소 연결하기 (주소 부분에 복사한 걸 붙여넣으세요!)
 git remote add origin https://github.com/본인아이디/저장소이름.git
@@ -21,3 +24,8 @@ git push -u origin main
 ### error: failed to push some refs to 'https://github.com/EmmettHwang/GwangsangWebAPP.git'
 
 ## 이때에 -f 옵션을 사용함. 
+
+### git init에서 한글 문제로 애러 날때 사용
+> chcp 65001   
+> git init   
+> git config --global core.quotepath false   
