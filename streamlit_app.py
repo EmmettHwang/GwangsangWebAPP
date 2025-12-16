@@ -12,6 +12,33 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# --- 1-1. 링크 미리보기 메타 태그 추가 ---
+st.markdown("""
+<head>
+    <!-- Open Graph 메타 태그 (카카오톡, 페이스북 미리보기) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="🧙‍♂️ 관상가 아솔 - 조선 팔도 최고의 관상">
+    <meta property="og:description" content="AI가 당신의 얼굴을 보고 초년운, 재물운, 애정운을 상세하게 풀어드립니다. 지금 바로 관상을 봐보시오!">
+    <meta property="og:image" content="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
+    <meta property="og:url" content="https://gwangsangapp.streamlit.app/">
+    <meta property="og:site_name" content="관상가 아솔">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="🧙‍♂️ 관상가 아솔">
+    <meta name="twitter:description" content="AI가 당신의 관상을 봐드립니다">
+    <meta name="twitter:image" content="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
+    
+    <!-- 기본 메타 태그 -->
+    <meta name="description" content="AI 관상가 아솔이 당신의 얼굴을 보고 초년운, 재물운, 애정운을 재미있게 풀어드립니다.">
+    <meta name="keywords" content="관상, AI관상, 관상보기, 얼굴운세, 무료관상, 아솔">
+    <meta name="author" content="관상가 아솔">
+    
+    <!-- 파비콘 -->
+    <link rel="icon" href="https://em-content.zobj.net/source/apple/391/mage_1f9d9.png">
+</head>
+""", unsafe_allow_html=True)
+
 # --- 2. [핵심] 인앱 브라우저 차단 (최상단에 즉시 실행) ---
 # height를 1로 설정하고 즉시 실행되도록 수정
 st.components.v1.html("""
@@ -479,9 +506,115 @@ if st.session_state.final_image:
             progress_bar.empty()
             status_text.empty()
             
+            # 결과 저장 (세션 상태에 저장)
+            st.session_state.last_result = response.text
+            st.session_state.last_model = successful_model
+            
             st.write("---")
             st.subheader(f"📜 아솔의 관상 풀이 (by {successful_model} 장군신)")
             st.markdown(response.text)
+            
+            # 복사 버튼 추가
+            st.components.v1.html(f"""
+            <div style="margin: 30px 0; text-align: center;">
+                <button onclick="copyResult()" style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border: none;
+                    padding: 15px 40px;
+                    border-radius: 12px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                    transition: all 0.3s;
+                    font-family: -apple-system, sans-serif;
+                " onmouseover="this.style.transform='translateY(-2px)';"
+                   onmouseout="this.style.transform='translateY(0)';">
+                    📋 관상 결과 복사하기
+                </button>
+                
+                <div id="copy-result-msg" style="
+                    margin-top: 15px;
+                    color: #28a745;
+                    font-weight: bold;
+                    font-size: 15px;
+                    min-height: 25px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                "></div>
+            </div>
+            
+            <script>
+                function copyResult() {{
+                    var resultText = `📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{response.text.replace('`', '').replace('"', '\\"')}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp.streamlit.app/`;
+                    
+                    var messageDiv = document.getElementById('copy-result-msg');
+                    var button = event.target;
+                    
+                    if (navigator.clipboard && navigator.clipboard.writeText) {{
+                        navigator.clipboard.writeText(resultText)
+                            .then(function() {{
+                                showCopySuccess(messageDiv, button);
+                            }})
+                            .catch(function() {{
+                                fallbackCopy(resultText, messageDiv, button);
+                            }});
+                    }} else {{
+                        fallbackCopy(resultText, messageDiv, button);
+                    }}
+                }}
+                
+                function fallbackCopy(text, messageDiv, button) {{
+                    var textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    
+                    try {{
+                        var successful = document.execCommand('copy');
+                        if (successful) {{
+                            showCopySuccess(messageDiv, button);
+                        }} else {{
+                            showCopyError(messageDiv);
+                        }}
+                    }} catch(err) {{
+                        showCopyError(messageDiv);
+                    }}
+                    
+                    document.body.removeChild(textarea);
+                }}
+                
+                function showCopySuccess(messageDiv, button) {{
+                    messageDiv.innerHTML = '✅ 관상 결과가 복사되었습니다!';
+                    messageDiv.style.opacity = '1';
+                    
+                    var originalText = button.innerHTML;
+                    button.innerHTML = '✅ 복사 완료!';
+                    button.style.background = '#28a745';
+                    
+                    setTimeout(function() {{
+                        messageDiv.style.opacity = '0';
+                        button.innerHTML = originalText;
+                        button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    }}, 3000);
+                }}
+                
+                function showCopyError(messageDiv) {{
+                    messageDiv.innerHTML = '⚠️ 복사 실패. 수동으로 선택해서 복사해주세요.';
+                    messageDiv.style.color = '#dc3545';
+                    messageDiv.style.opacity = '1';
+                    
+                    setTimeout(function() {{
+                        messageDiv.style.opacity = '0';
+                        messageDiv.style.color = '#28a745';
+                    }}, 4000);
+                }}
+            </script>
+            """, height=120)
+            
             st.balloons()
 
         except Exception as e:
