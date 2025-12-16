@@ -494,6 +494,6 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
     <p>🔒 모든 사진은 분석 후 즉시 삭제됩니다</p>
-    <p>🧙‍♂️ 관상가 아솔 © 2024</p>
+    <p>🧙‍♂️ 관상가 아솔 © 2025</p>
 </div>
 """, unsafe_allow_html=True)
