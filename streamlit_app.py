@@ -405,7 +405,7 @@ if st.session_state.final_image:
                     break
                 else:
                     if error == "quota_exceeded":
-                        status_text.markdown(f"### 💤 {display_name} 장군신이 휴식 중이오... 다른 장군신 찾는 중...")
+                        status_text.markdown(f"##### 💤 {display_name} 장군신이 휴식 중이오... 다른 장군신 찾는 중...")
                         time.sleep(0.8)
                     elif error == "model_not_found":
                         continue
