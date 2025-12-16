@@ -12,50 +12,67 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. [최우선] 카카오톡 강제 탈출 코드 ---
+# --- 2. [최우선] 모든 인앱 브라우저 무조건 차단 ---
 st.components.v1.html("""
 <script>
     (function() {
         var userAgent = navigator.userAgent.toLowerCase();
         var currentUrl = window.location.href;
         
-        // 카카오톡 및 기타 인앱 브라우저 감지
-        var isKakao = userAgent.indexOf("kakao") > -1;
-        var isInApp = isKakao || 
-                      userAgent.indexOf("instagram") > -1 || 
-                      userAgent.indexOf("line") > -1 ||
-                      userAgent.indexOf("fban") > -1 ||
-                      userAgent.indexOf("fbav") > -1 ||
-                      userAgent.indexOf("naver") > -1;
+        // 모든 인앱 브라우저 감지 (확장된 목록)
+        var isInApp = userAgent.indexOf("kakao") > -1 ||          // 카카오톡
+                      userAgent.indexOf("kakaotalk") > -1 ||       // 카카오톡
+                      userAgent.indexOf("instagram") > -1 ||       // 인스타그램
+                      userAgent.indexOf("line") > -1 ||            // 라인
+                      userAgent.indexOf("fban") > -1 ||            // 페이스북
+                      userAgent.indexOf("fbav") > -1 ||            // 페이스북 앱
+                      userAgent.indexOf("fb_iab") > -1 ||          // 페이스북 인앱
+                      userAgent.indexOf("naver") > -1 ||           // 네이버
+                      userAgent.indexOf("snapchat") > -1 ||        // 스냅챗
+                      userAgent.indexOf("twitter") > -1 ||         // 트위터
+                      userAgent.indexOf("whatsapp") > -1 ||        // 왓츠앱
+                      userAgent.indexOf("telegram") > -1 ||        // 텔레그램
+                      userAgent.indexOf("wechat") > -1 ||          // 위챗
+                      userAgent.indexOf("band") > -1 ||            // 밴드
+                      userAgent.indexOf("daum") > -1 ||            // 다음
+                      userAgent.indexOf("zumapp") > -1;            // 줌 인터넷
         
+        // 인앱 브라우저 감지 시
         if (isInApp) {
-            // Android: Chrome으로 강제 리다이렉트 시도
+            console.log('인앱 브라우저 감지됨 - Chrome으로 강제 이동');
+            
+            // Android: Chrome 앱으로 강제 리다이렉트
             if (/android/i.test(userAgent)) {
-                // Intent 스킴으로 Chrome 앱 호출
+                // Intent 스킴으로 Chrome 앱 직접 호출
                 var intentUrl = 'intent://' + currentUrl.replace(/https?:\\/\\//, '') + 
                                 '#Intent;scheme=https;package=com.android.chrome;end';
                 
                 window.location.href = intentUrl;
                 
-                // 500ms 후에도 페이지에 남아있으면 안내 화면 표시
+                // 500ms 후에도 열리지 않으면 안내 화면
                 setTimeout(function() {
                     showBlockScreen();
                 }, 500);
+                
+            } else if (/iphone|ipad/i.test(userAgent)) {
+                // iOS: 자동 리다이렉트 불가능, 즉시 안내 화면
+                showBlockScreen();
+                
             } else {
-                // iOS 또는 기타: 즉시 안내 화면
+                // 기타 환경: 안내 화면
                 showBlockScreen();
             }
         }
         
         function showBlockScreen() {
-            // 기존 Streamlit 콘텐츠 완전 숨김
-            var root = document.querySelector('.main');
-            if (root) root.style.display = 'none';
+            // 전체 화면 덮어씌우기
+            document.body.innerHTML = '';
+            document.body.style.margin = '0';
+            document.body.style.padding = '0';
+            document.body.style.overflow = 'hidden';
             
-            // 전체 화면 차단 화면 생성
-            var blockScreen = document.createElement('div');
-            blockScreen.id = 'kakao-block-screen';
-            blockScreen.innerHTML = `
+            var blockDiv = document.createElement('div');
+            blockDiv.innerHTML = `
                 <div style="
                     position: fixed;
                     top: 0;
@@ -69,29 +86,36 @@ st.components.v1.html("""
                     align-items: center;
                     padding: 20px;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    box-sizing: border-box;
                 ">
                     <div style="
                         background: white;
                         padding: 40px 30px;
                         border-radius: 20px;
-                        max-width: 380px;
+                        max-width: 400px;
+                        width: 100%;
                         text-align: center;
                         box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                        box-sizing: border-box;
                     ">
-                        <!-- 아이콘 -->
-                        <div style="font-size: 80px; margin-bottom: 20px; animation: bounce 1s infinite;">
+                        <!-- 애니메이션 아이콘 -->
+                        <div style="
+                            font-size: 80px;
+                            margin-bottom: 20px;
+                            animation: bounce 1s infinite;
+                        ">
                             🚫
                         </div>
                         
-                        <!-- 제목 -->
+                        <!-- 메인 제목 -->
                         <h1 style="
                             color: #d32f2f;
                             font-size: 24px;
                             font-weight: bold;
-                            margin-bottom: 15px;
+                            margin: 0 0 15px 0;
                             line-height: 1.3;
                         ">
-                            카카오톡에서는<br>사용할 수 없습니다
+                            인앱 브라우저에서는<br>사용할 수 없습니다
                         </h1>
                         
                         <!-- 설명 -->
@@ -99,10 +123,10 @@ st.components.v1.html("""
                             color: #666;
                             font-size: 16px;
                             line-height: 1.6;
-                            margin-bottom: 30px;
+                            margin: 0 0 30px 0;
                         ">
                             카메라 기능을 사용하려면<br>
-                            <b style="color: #333;">Chrome 브라우저</b>에서 열어주세요
+                            <b style="color: #333;">Chrome 브라우저</b>에서 열어야 합니다
                         </p>
                         
                         <!-- 안내 박스 -->
@@ -148,8 +172,8 @@ st.components.v1.html("""
                             cursor: pointer;
                             box-shadow: 0 4px 12px rgba(125, 90, 90, 0.3);
                             transition: all 0.2s;
-                        " onmouseover="this.style.background='#664848'" 
-                           onmouseout="this.style.background='#7D5A5A'">
+                        " onmousedown="this.style.transform='scale(0.98)';"
+                           onmouseup="this.style.transform='scale(1)';">
                             📋 주소 복사하고 Chrome에서 열기
                         </button>
                         
@@ -166,7 +190,7 @@ st.components.v1.html("""
                         <p style="
                             color: #999;
                             font-size: 13px;
-                            margin-top: 20px;
+                            margin: 20px 0 0 0;
                             line-height: 1.5;
                         ">
                             💡 Chrome이 없다면<br>
@@ -187,11 +211,10 @@ st.components.v1.html("""
                         var url = '${currentUrl}';
                         var messageDiv = document.getElementById('copy-message');
                         
-                        // 클립보드 복사
                         if (navigator.clipboard && navigator.clipboard.writeText) {
                             navigator.clipboard.writeText(url)
                                 .then(function() {
-                                    messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small>이제 Chrome을 열어서 붙여넣기 하세요</small>';
+                                    messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small style="font-size: 12px;">이제 Chrome을 열어서 붙여넣기 하세요</small>';
                                     setTimeout(function() {
                                         messageDiv.textContent = '';
                                     }, 4000);
@@ -211,12 +234,22 @@ st.components.v1.html("""
                         textarea.style.position = 'fixed';
                         textarea.style.opacity = '0';
                         document.body.appendChild(textarea);
-                        textarea.select();
+                        
+                        if (navigator.userAgent.match(/ipad|iphone/i)) {
+                            var range = document.createRange();
+                            range.selectNodeContents(textarea);
+                            var selection = window.getSelection();
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                            textarea.setSelectionRange(0, 999999);
+                        } else {
+                            textarea.select();
+                        }
                         
                         try {
                             var successful = document.execCommand('copy');
                             if (successful) {
-                                messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small>Chrome을 열어서 붙여넣기 하세요</small>';
+                                messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small style="font-size: 12px;">Chrome을 열어서 붙여넣기 하세요</small>';
                             } else {
                                 messageDiv.innerHTML = '⚠️ 수동으로 주소를 복사해주세요';
                             }
@@ -233,7 +266,7 @@ st.components.v1.html("""
                 </script>
             `;
             
-            document.body.appendChild(blockScreen);
+            document.body.appendChild(blockDiv);
         }
     })();
 </script>
