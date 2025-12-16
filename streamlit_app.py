@@ -394,7 +394,7 @@ if st.session_state.final_image:
             for model_name in available_models:
                 display_name = model_name.replace('models/', '').replace('gemini-', '').upper()
                 
-                status_text.markdown(f"### ⚡ **{display_name}** 장군신 소환 중...")
+                status_text.markdown(f"##### ⚡ **{display_name}** 장군신 소환 중...")
                 progress_bar.progress(85)
                 
                 response, error = try_model_with_image(model_name, prompt, image)
