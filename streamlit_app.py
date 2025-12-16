@@ -12,267 +12,291 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. [최우선] 모든 인앱 브라우저 무조건 차단 ---
+# --- 2. [핵심] 인앱 브라우저 차단 (최상단에 즉시 실행) ---
+# height를 1로 설정하고 즉시 실행되도록 수정
 st.components.v1.html("""
-<script>
-    (function() {
-        var userAgent = navigator.userAgent.toLowerCase();
-        var currentUrl = window.location.href;
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+<script type="text/javascript">
+(function() {
+    'use strict';
+    
+    // 즉시 실행
+    var ua = navigator.userAgent.toLowerCase();
+    var href = window.top.location.href || window.location.href;
+    
+    // 인앱 브라우저 패턴 (더 정확한 감지)
+    var inAppPatterns = [
+        'kakao',
+        'kakaotalk',
+        'instagram',
+        'line',
+        'fban',
+        'fbav',
+        'fb_iab',
+        'naver',
+        'snapchat',
+        'twitter',
+        'whatsapp',
+        'telegram',
+        'wechat',
+        'band',
+        'daum',
+        'everytimeapp'
+    ];
+    
+    var isInApp = false;
+    for (var i = 0; i < inAppPatterns.length; i++) {
+        if (ua.indexOf(inAppPatterns[i]) > -1) {
+            isInApp = true;
+            break;
+        }
+    }
+    
+    if (isInApp) {
+        // 부모 window에 메시지 전송
+        if (window.parent) {
+            window.parent.postMessage({
+                type: 'IN_APP_BROWSER_DETECTED',
+                url: href,
+                userAgent: ua
+            }, '*');
+        }
         
-        // 모든 인앱 브라우저 감지 (확장된 목록)
-        var isInApp = userAgent.indexOf("kakao") > -1 ||          // 카카오톡
-                      userAgent.indexOf("kakaotalk") > -1 ||       // 카카오톡
-                      userAgent.indexOf("instagram") > -1 ||       // 인스타그램
-                      userAgent.indexOf("line") > -1 ||            // 라인
-                      userAgent.indexOf("fban") > -1 ||            // 페이스북
-                      userAgent.indexOf("fbav") > -1 ||            // 페이스북 앱
-                      userAgent.indexOf("fb_iab") > -1 ||          // 페이스북 인앱
-                      userAgent.indexOf("naver") > -1 ||           // 네이버
-                      userAgent.indexOf("snapchat") > -1 ||        // 스냅챗
-                      userAgent.indexOf("twitter") > -1 ||         // 트위터
-                      userAgent.indexOf("whatsapp") > -1 ||        // 왓츠앱
-                      userAgent.indexOf("telegram") > -1 ||        // 텔레그램
-                      userAgent.indexOf("wechat") > -1 ||          // 위챗
-                      userAgent.indexOf("band") > -1 ||            // 밴드
-                      userAgent.indexOf("daum") > -1 ||            // 다음
-                      userAgent.indexOf("zumapp") > -1;            // 줌 인터넷
-        
-        // 인앱 브라우저 감지 시
-        if (isInApp) {
-            console.log('인앱 브라우저 감지됨 - Chrome으로 강제 이동');
+        // Android: Chrome으로 리다이렉트 시도
+        if (ua.indexOf('android') > -1) {
+            var intentUrl = 'intent://' + href.replace(/https?:\\/\\//, '') + 
+                          '#Intent;scheme=https;package=com.android.chrome;end';
             
-            // Android: Chrome 앱으로 강제 리다이렉트
-            if (/android/i.test(userAgent)) {
-                // Intent 스킴으로 Chrome 앱 직접 호출
-                var intentUrl = 'intent://' + currentUrl.replace(/https?:\\/\\//, '') + 
-                                '#Intent;scheme=https;package=com.android.chrome;end';
-                
+            // top window에서 리다이렉트
+            try {
+                window.top.location.href = intentUrl;
+            } catch(e) {
                 window.location.href = intentUrl;
-                
-                // 500ms 후에도 열리지 않으면 안내 화면
-                setTimeout(function() {
-                    showBlockScreen();
-                }, 500);
-                
-            } else if (/iphone|ipad/i.test(userAgent)) {
-                // iOS: 자동 리다이렉트 불가능, 즉시 안내 화면
-                showBlockScreen();
-                
-            } else {
-                // 기타 환경: 안내 화면
-                showBlockScreen();
             }
         }
-        
-        function showBlockScreen() {
-            // 전체 화면 덮어씌우기
-            document.body.innerHTML = '';
-            document.body.style.margin = '0';
-            document.body.style.padding = '0';
-            document.body.style.overflow = 'hidden';
-            
-            var blockDiv = document.createElement('div');
-            blockDiv.innerHTML = `
-                <div style="
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: linear-gradient(135deg, #FEE500 0%, #FFD700 100%);
-                    z-index: 999999;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    padding: 20px;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                    box-sizing: border-box;
-                ">
-                    <div style="
-                        background: white;
-                        padding: 40px 30px;
-                        border-radius: 20px;
-                        max-width: 400px;
-                        width: 100%;
-                        text-align: center;
-                        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                        box-sizing: border-box;
-                    ">
-                        <!-- 애니메이션 아이콘 -->
-                        <div style="
-                            font-size: 80px;
-                            margin-bottom: 20px;
-                            animation: bounce 1s infinite;
-                        ">
-                            🚫
-                        </div>
-                        
-                        <!-- 메인 제목 -->
-                        <h1 style="
-                            color: #d32f2f;
-                            font-size: 24px;
-                            font-weight: bold;
-                            margin: 0 0 15px 0;
-                            line-height: 1.3;
-                        ">
-                            인앱 브라우저에서는<br>사용할 수 없습니다
-                        </h1>
-                        
-                        <!-- 설명 -->
-                        <p style="
-                            color: #666;
-                            font-size: 16px;
-                            line-height: 1.6;
-                            margin: 0 0 30px 0;
-                        ">
-                            카메라 기능을 사용하려면<br>
-                            <b style="color: #333;">Chrome 브라우저</b>에서 열어야 합니다
-                        </p>
-                        
-                        <!-- 안내 박스 -->
-                        <div style="
-                            background: #f8f9fa;
-                            padding: 20px;
-                            border-radius: 12px;
-                            text-align: left;
-                            margin-bottom: 25px;
-                            border: 2px solid #e9ecef;
-                        ">
-                            <div style="
-                                font-weight: bold;
-                                color: #333;
-                                margin-bottom: 12px;
-                                font-size: 15px;
-                            ">
-                                📱 Chrome으로 여는 방법:
-                            </div>
-                            <ol style="
-                                margin: 0;
-                                padding-left: 20px;
-                                color: #555;
-                                font-size: 14px;
-                                line-height: 1.8;
-                            ">
-                                <li>우측 상단 <b style="color: #000;">점 3개 (⋮)</b> 클릭</li>
-                                <li><b style="color: #000;">"다른 브라우저로 열기"</b> 선택</li>
-                                <li><b style="color: #000;">"Chrome"</b> 선택</li>
-                            </ol>
-                        </div>
-                        
-                        <!-- 주소 복사 버튼 -->
-                        <button onclick="copyUrlAndNotify()" style="
-                            width: 100%;
-                            background: #7D5A5A;
-                            color: white;
-                            border: none;
-                            padding: 16px;
-                            border-radius: 12px;
-                            font-size: 16px;
-                            font-weight: bold;
-                            cursor: pointer;
-                            box-shadow: 0 4px 12px rgba(125, 90, 90, 0.3);
-                            transition: all 0.2s;
-                        " onmousedown="this.style.transform='scale(0.98)';"
-                           onmouseup="this.style.transform='scale(1)';">
-                            📋 주소 복사하고 Chrome에서 열기
-                        </button>
-                        
-                        <!-- 복사 완료 메시지 -->
-                        <div id="copy-message" style="
-                            color: #28a745;
-                            font-weight: bold;
-                            margin-top: 15px;
-                            height: 25px;
-                            font-size: 15px;
-                        "></div>
-                        
-                        <!-- 하단 추가 안내 -->
-                        <p style="
-                            color: #999;
-                            font-size: 13px;
-                            margin: 20px 0 0 0;
-                            line-height: 1.5;
-                        ">
-                            💡 Chrome이 없다면<br>
-                            <b>Safari</b>나 <b>Samsung Internet</b>도 가능합니다
-                        </p>
-                    </div>
+    }
+})();
+</script>
+</body>
+</html>
+""", height=1)
+
+# --- 3. 추가 차단 레이어 (Streamlit 메인 영역) ---
+st.markdown("""
+<script>
+window.addEventListener('message', function(event) {
+    if (event.data.type === 'IN_APP_BROWSER_DETECTED') {
+        // 인앱 브라우저 감지됨 - 전체 화면 차단
+        document.body.innerHTML = '';
+        showBlockScreen(event.data.url, event.data.userAgent);
+    }
+});
+
+function showBlockScreen(currentUrl, userAgent) {
+    var isAndroid = userAgent.indexOf('android') > -1;
+    
+    document.body.innerHTML = `
+        <div style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #FEE500 0%, #FFD700 100%);
+            z-index: 999999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+        ">
+            <div style="
+                background: white;
+                padding: 40px 30px;
+                border-radius: 20px;
+                max-width: 400px;
+                width: 100%;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            ">
+                <div style="font-size: 80px; margin-bottom: 20px; animation: shake 0.5s infinite;">
+                    ⛔
                 </div>
                 
-                <style>
-                    @keyframes bounce {
-                        0%, 100% { transform: translateY(0); }
-                        50% { transform: translateY(-10px); }
-                    }
-                </style>
+                <h1 style="
+                    color: #d32f2f;
+                    font-size: 26px;
+                    font-weight: bold;
+                    margin: 0 0 15px 0;
+                    line-height: 1.3;
+                ">
+                    앱 내부 브라우저에서는<br>사용할 수 없습니다
+                </h1>
                 
-                <script>
-                    function copyUrlAndNotify() {
-                        var url = '${currentUrl}';
-                        var messageDiv = document.getElementById('copy-message');
-                        
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(url)
-                                .then(function() {
-                                    messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small style="font-size: 12px;">이제 Chrome을 열어서 붙여넣기 하세요</small>';
-                                    setTimeout(function() {
-                                        messageDiv.textContent = '';
-                                    }, 4000);
-                                })
-                                .catch(function() {
-                                    fallbackCopy(url);
-                                });
-                        } else {
-                            fallbackCopy(url);
-                        }
-                    }
-                    
-                    function fallbackCopy(text) {
-                        var messageDiv = document.getElementById('copy-message');
-                        var textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        
-                        if (navigator.userAgent.match(/ipad|iphone/i)) {
-                            var range = document.createRange();
-                            range.selectNodeContents(textarea);
-                            var selection = window.getSelection();
-                            selection.removeAllRanges();
-                            selection.addRange(range);
-                            textarea.setSelectionRange(0, 999999);
-                        } else {
-                            textarea.select();
-                        }
-                        
-                        try {
-                            var successful = document.execCommand('copy');
-                            if (successful) {
-                                messageDiv.innerHTML = '✅ 주소가 복사되었습니다!<br><small style="font-size: 12px;">Chrome을 열어서 붙여넣기 하세요</small>';
-                            } else {
-                                messageDiv.innerHTML = '⚠️ 수동으로 주소를 복사해주세요';
-                            }
-                        } catch (err) {
-                            messageDiv.innerHTML = '⚠️ 수동으로 주소를 복사해주세요';
-                        }
-                        
-                        document.body.removeChild(textarea);
-                        
-                        setTimeout(function() {
-                            messageDiv.textContent = '';
-                        }, 4000);
-                    }
-                </script>
-            `;
+                <p style="
+                    color: #666;
+                    font-size: 17px;
+                    line-height: 1.6;
+                    margin: 0 0 30px 0;
+                ">
+                    카메라를 사용하려면<br>
+                    <b style="color: #000;">Chrome 브라우저</b>로 열어주세요
+                </p>
+                
+                <div style="
+                    background: #f8f9fa;
+                    padding: 25px 20px;
+                    border-radius: 12px;
+                    text-align: left;
+                    margin-bottom: 25px;
+                    border: 3px solid #dc3545;
+                ">
+                    <div style="
+                        font-weight: bold;
+                        color: #dc3545;
+                        margin-bottom: 15px;
+                        font-size: 16px;
+                        text-align: center;
+                    ">
+                        👉 Chrome으로 여는 방법
+                    </div>
+                    <ol style="
+                        margin: 0;
+                        padding-left: 25px;
+                        color: #333;
+                        font-size: 15px;
+                        line-height: 2;
+                    ">
+                        <li><b>우측 상단 점 3개 (⋮)</b> 클릭</li>
+                        <li><b>"다른 브라우저로 열기"</b> 선택</li>
+                        <li><b>"Chrome"</b> 선택</li>
+                    </ol>
+                </div>
+                
+                ${isAndroid ? `
+                <button onclick="openInChrome()" style="
+                    width: 100%;
+                    background: #4285F4;
+                    color: white;
+                    border: none;
+                    padding: 18px;
+                    border-radius: 12px;
+                    font-size: 17px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    margin-bottom: 15px;
+                    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+                ">
+                    🌐 Chrome에서 열기 (자동)
+                </button>
+                ` : ''}
+                
+                <button onclick="copyUrl()" style="
+                    width: 100%;
+                    background: #7D5A5A;
+                    color: white;
+                    border: none;
+                    padding: 18px;
+                    border-radius: 12px;
+                    font-size: 17px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(125, 90, 90, 0.3);
+                ">
+                    📋 주소 복사하기
+                </button>
+                
+                <div id="msg" style="
+                    color: #28a745;
+                    font-weight: bold;
+                    margin-top: 15px;
+                    min-height: 25px;
+                    font-size: 15px;
+                "></div>
+                
+                <p style="
+                    color: #999;
+                    font-size: 13px;
+                    margin: 25px 0 0 0;
+                    line-height: 1.5;
+                ">
+                    💡 Safari나 Samsung Internet도 가능합니다
+                </p>
+            </div>
+        </div>
+        
+        <style>
+            @keyframes shake {
+                0%, 100% { transform: rotate(0deg); }
+                25% { transform: rotate(-5deg); }
+                75% { transform: rotate(5deg); }
+            }
+            body {
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }
+        </style>
+        
+        <script>
+            function openInChrome() {
+                var intentUrl = 'intent://' + '${currentUrl}'.replace(/https?:\\/\\//, '') + 
+                              '#Intent;scheme=https;package=com.android.chrome;end';
+                window.location.href = intentUrl;
+                
+                setTimeout(function() {
+                    document.getElementById('msg').innerHTML = 
+                        '⚠️ Chrome이 열리지 않으면<br><small>수동으로 메뉴에서 선택해주세요</small>';
+                }, 2000);
+            }
             
-            document.body.appendChild(blockDiv);
-        }
-    })();
+            function copyUrl() {
+                var url = '${currentUrl}';
+                var msg = document.getElementById('msg');
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(url).then(function() {
+                        msg.innerHTML = '✅ 복사 완료!<br><small>Chrome을 열어서 붙여넣기 하세요</small>';
+                    }).catch(function() {
+                        fallbackCopy(url, msg);
+                    });
+                } else {
+                    fallbackCopy(url, msg);
+                }
+            }
+            
+            function fallbackCopy(text, msgDiv) {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    msgDiv.innerHTML = '✅ 복사 완료!<br><small>Chrome을 열어서 붙여넣기 하세요</small>';
+                } catch(e) {
+                    msgDiv.innerHTML = '⚠️ 수동으로 주소창에서 복사해주세요';
+                }
+                
+                document.body.removeChild(textarea);
+            }
+        </script>
+    `;
+}
 </script>
-""", height=0)
+""", unsafe_allow_html=True)
 
-# --- 3. PWA 지원 (정상 브라우저용) ---
+# --- 4. PWA 지원 ---
 def add_pwa_support():
     manifest = {
         "name": "관상가 아솔",
@@ -283,67 +307,28 @@ def add_pwa_support():
         "background_color": "#ffffff",
         "theme_color": "#7D5A5A",
         "orientation": "portrait",
-        "icons": [
-            {
-                "src": "https://em-content.zobj.net/source/apple/391/mage_1f9d9.png",
-                "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "any maskable"
-            }
-        ]
+        "icons": [{
+            "src": "https://em-content.zobj.net/source/apple/391/mage_1f9d9.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        }]
     }
     
     import json
     manifest_json = json.dumps(manifest)
     
     pwa_html = f"""
-    <head>
-        <link rel="manifest" href="data:application/json;base64,{base64.b64encode(manifest_json.encode()).decode()}">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="theme-color" content="#7D5A5A">
-    </head>
-    
-    <script>
-        let deferredPrompt;
-        
-        window.addEventListener('beforeinstallprompt', (e) => {{
-            e.preventDefault();
-            deferredPrompt = e;
-            const installBtn = document.getElementById('pwa-install-btn');
-            if (installBtn) installBtn.style.display = 'block';
-        }});
-        
-        function installPWA() {{
-            if (deferredPrompt) {{
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {{
-                    if (choiceResult.outcome === 'accepted') {{
-                        alert('✅ 설치 완료! 홈 화면에서 "아솔"을 찾아보세요.');
-                    }}
-                    deferredPrompt = null;
-                    const installBtn = document.getElementById('pwa-install-btn');
-                    if (installBtn) installBtn.style.display = 'none';
-                }});
-            }} else {{
-                const ua = navigator.userAgent.toLowerCase();
-                let msg = '';
-                if (/iphone|ipad/.test(ua)) {{
-                    msg = '📱 iOS: 하단 공유버튼 → "홈 화면에 추가"';
-                }} else {{
-                    msg = '📱 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"';
-                }}
-                alert(msg);
-            }}
-        }}
-    </script>
+    <link rel="manifest" href="data:application/json;base64,{base64.b64encode(manifest_json.encode()).decode()}">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#7D5A5A">
     """
     
-    st.components.v1.html(pwa_html, height=0)
+    st.markdown(pwa_html, unsafe_allow_html=True)
 
 add_pwa_support()
 
-# --- 4. 스타일 ---
+# --- 5. 스타일 ---
 st.markdown("""
     <style>
     .stButton>button {
@@ -365,31 +350,17 @@ st.markdown("""
         font-family: 'Helvetica', sans-serif;
         color: #333;
     }
-    #pwa-install-btn {
-        display: none;
-        width: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 15px;
-        border-radius: 10px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. API 키 ---
+# --- 6. API 키 ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 except:
     st.error("🚨 API 키 설정을 확인하시오.")
     st.stop()
 
-# --- 6. 장군신 함수들 ---
+# --- 7. 장군신 함수들 ---
 def get_all_available_models():
     try:
         all_models = []
@@ -414,19 +385,12 @@ def try_model_with_image(model_name, prompt, image):
         else:
             return None, error_msg
 
-# --- 7. 세션 초기화 ---
+# --- 8. 세션 초기화 ---
 if 'final_image' not in st.session_state:
     st.session_state.final_image = None
 
-# --- 8. 메인 UI ---
+# --- 9. 메인 UI ---
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-
-st.markdown("""
-<button id="pwa-install-btn" onclick="installPWA()">
-    💡 홈 화면에 추가하면 앱처럼 빠르게 접속할 수 있소!
-</button>
-""", unsafe_allow_html=True)
-
 st.write("---")
 
 input_method = st.radio(
@@ -444,7 +408,7 @@ elif input_method == "📂 앨범 선택":
     if uploaded_file:
         st.session_state.final_image = uploaded_file
 
-# --- 9. 분석 로직 ---
+# --- 10. 분석 로직 ---
 if st.session_state.final_image:
     st.write("---")
     st.image(st.session_state.final_image, caption="선택된 얼굴", use_container_width=True)
@@ -523,10 +487,11 @@ if st.session_state.final_image:
         except Exception as e:
             st.error(f"예기치 못한 에러가 났소. (내용: {e})")
 
+# --- 11. 하단 안내 ---
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
-    <p>🔒 모든 사진은 분석 후 즉시 삭제됩니다</p>
-    <p>🧙‍♂️ 관상가 아솔 © 2025</p>
+    <p>🔒 <b>개인정보 보호:</b> 모든 사진은 분석 후 즉시 삭제됩니다.</p>
+    <p>🧙‍♂️ 관상가 아솔 © 2024</p>
 </div>
 """, unsafe_allow_html=True)
