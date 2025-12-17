@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.2.0 (2024-12-17)
+# Version: v2.4.0 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -12,6 +12,10 @@
 #   - 중복 except 블록 제거 (문법 오류 수정)
 #   - 화면에 버전 번호 표시 추가
 #   - 들여쓰기 오류 긴급 수정
+#   - 강력한 디버깅 로그 추가
+#   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
+#   - print flush=True 추가 (로그 즉시 출력)
+#   - 여러 모델 자동 재시도 (최대 5개)
 # ================================================================
 
 import streamlit as st
@@ -426,7 +430,9 @@ st.markdown("""
 # --- 7. API 키 설정 ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-except:
+    print("✅ API 키 설정 성공!", flush=True)
+except Exception as e:
+    print(f"❌ API 키 설정 실패: {e}", flush=True)
     st.error("🚨 API 키 설정을 확인하시오. `.streamlit/secrets.toml` 파일에 GOOGLE_API_KEY를 추가해야 합니다.")
     st.stop()
 
@@ -445,7 +451,7 @@ def get_all_available_models():
 def analyze_face_info(model_name, image):
     """얼굴에서 성별, 나이대, 직업 분석 (관상학 + 의상 분석)"""
     try:
-        print(f"\n[DEBUG] analyze_face_info 호출됨 - 모델: {model_name}")
+        print(f"\n[DEBUG] analyze_face_info 호출됨 - 모델: {model_name}", flush=True)
         model = genai.GenerativeModel(model_name)
         analysis_prompt = """
 이 사진을 보고 다음 정보를 분석해주세요:
@@ -482,8 +488,8 @@ def analyze_face_info(model_name, image):
 어울리는 직업: 교육, 컨설팅, 미디어
 """
         response = model.generate_content([analysis_prompt, image])
-        print(f"[DEBUG] AI 응답 받음 - 길이: {len(response.text)} 문자")
-        print(f"[DEBUG] AI 응답 미리보기: {response.text[:200]}...")
+        print(f"[DEBUG] AI 응답 받음 - 길이: {len(response.text)} 문자", flush=True)
+        print(f"[DEBUG] AI 응답 미리보기: {response.text[:200]}...", flush=True)
         return response.text, None
     except Exception as e:
         return None, str(e)
@@ -512,8 +518,13 @@ if 'last_model' not in st.session_state:
     st.session_state.last_model = None
 
 # --- 10. 메인 UI ---
+print("=" * 80, flush=True)
+print("🚀 앱 시작됨!", flush=True)
+print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+print("=" * 80, flush=True)
+
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.2.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.4.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -527,11 +538,13 @@ input_method = st.radio(
 if input_method == "📸 직접 촬영":
     camera_image = st.camera_input("📸 얼굴을 화면에 담으시오", label_visibility="visible")
     if camera_image:
+        print("📸 카메라로 사진 촬영됨!", flush=True)
         st.session_state.final_image = camera_image
         
 elif input_method == "📂 앨범 선택":
     uploaded_file = st.file_uploader("📂 사진을 선택하시오", type=['jpg', 'jpeg', 'png'], label_visibility="visible")
     if uploaded_file:
+        print("📂 앨범에서 사진 선택됨!", flush=True)
         st.session_state.final_image = uploaded_file
 
 # --- 11. 관상 분석 로직 ---
@@ -540,6 +553,10 @@ if st.session_state.final_image:
     st.image(st.session_state.final_image, caption="✅ 선택된 얼굴", use_container_width=True)
 
     if st.button("🔮 아솔에게 관상 묻기", type="primary"):
+        print("=" * 80, flush=True)
+        print("🔮 버튼 클릭됨!", flush=True)
+        print(f"⏰ 클릭 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print("=" * 80, flush=True)
         try:
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -549,6 +566,8 @@ if st.session_state.final_image:
             progress_bar.progress(3)
             
             available_models = get_all_available_models()
+            print(f"[DEBUG] 사용 가능한 모델 개수: {len(available_models)}", flush=True)
+            print(f"[DEBUG] 모델 목록: {available_models}", flush=True)
             
             # 2단계: 이미지 열기
             image = Image.open(st.session_state.final_image)
@@ -563,16 +582,37 @@ if st.session_state.final_image:
             current_jobs = []
             suitable_jobs = []
             
-            # 첫 번째 모델로 성별/나이/직업 분석 시도
+            # 여러 모델로 성별/나이/직업 분석 시도 (자동 fallback)
+            print(f"[DEBUG] available_models 길이 체크: {len(available_models)}", flush=True)
             if len(available_models) > 0:
+                # 최대 5개 모델 시도
+                max_attempts = min(5, len(available_models))
+                for attempt in range(max_attempts):
+                    model_to_use = available_models[attempt]
+                    print(f"[시도 {attempt+1}/{max_attempts}] 모델: {model_to_use}", flush=True)
+                    
+                    face_info, error = analyze_face_info(model_to_use, image)
+                    print(f"[DEBUG] 반환값: face_info={'있음' if face_info else '없음'}, error={error[:100] if error else 'None'}", flush=True)
+                    
+                    if face_info:
+                        print(f"✅ 성공! 모델 '{model_to_use}' 사용됨", flush=True)
+                        break
+                    else:
+                        print(f"⚠️ 실패: {error[:80] if error else '알 수 없음'}", flush=True)
+                        if attempt < max_attempts - 1:
+                            print(f"🔄 다음 모델 시도 중...", flush=True)
+                
+                if not face_info:
+                    print(f"❌ {max_attempts}개 모델 모두 실패!", flush=True)
+                    st.error(f"⚠️ {max_attempts}개 모델을 시도했지만 모두 실패했습니다. 잠시 후 다시 시도해주세요.")
+                
                 try:
-                    face_info, error = analyze_face_info(available_models[0], image)
                     if face_info:
                         # ===== 디버그: AI 응답 전체 출력 =====
-                        print("=" * 80)
-                        print("🔍 AI 원본 응답 (콘솔):")
+                        print("=" * 80, flush=True)
+                        print("🔍 AI 원본 응답 (콘솔):", flush=True)
                         print(face_info)
-                        print("=" * 80)
+                        print("=" * 80, flush=True)
                         st.info(f"🔍 AI 원본 응답:\n{face_info}")
                         
                         # 성별 추출 - 개선된 방식
@@ -628,21 +668,32 @@ if st.session_state.final_image:
                                     break
                         
                         # 디버그 출력
-                        print("=" * 80)
-                        print("✅ 파싱 결과 (콘솔):")
-                        print(f"성별: {gender}")
+                        print("=" * 80, flush=True)
+                        print("✅ 파싱 결과 (콘솔):", flush=True)
+                        print(f"성별: {gender}", flush=True)
                         print(f"나이: {age_range}")
                         print(f"현재직업: {current_jobs}")
                         print(f"어울리는직업: {suitable_jobs}")
-                        print("=" * 80)
+                        print("=" * 80, flush=True)
                         st.success(f"✅ 파싱 결과:\n성별={gender}\n나이={age_range}\n현재직업={current_jobs}\n어울리는직업={suitable_jobs}")
                         
                 except Exception as e:
-                    print(f"[ERROR] 파싱 에러: {e}")
+                    print(f"[ERROR] 파싱 에러: {e}", flush=True)
                     import traceback
                     traceback.print_exc()
                     st.error(f"⚠️ 파싱 에러: {e}")
                     pass
+            else:
+                print(f"[DEBUG] available_models가 비어있습니다! 모델을 찾을 수 없습니다.", flush=True)
+                st.error("⚠️ 사용 가능한 AI 모델이 없습니다. API 키를 확인해주세요.")
+            
+            # face_info 최종 상태 확인
+            print(f"[DEBUG] 최종 face_info 상태: {'있음' if face_info else '없음'}", flush=True)
+            print(f"[DEBUG] 최종 gender: {gender}", flush=True)
+            print(f"[DEBUG] 최종 age_range: {age_range}", flush=True)
+            print(f"[DEBUG] 최종 current_jobs: {current_jobs}", flush=True)
+            print(f"[DEBUG] 최종 suitable_jobs: {suitable_jobs}", flush=True)
+            
             # 분석 결과 표시
             result_text = f"👤 **{gender}**"
             if age_range:
