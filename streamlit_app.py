@@ -1,10 +1,12 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.1.0 (2024-12-17)
+# Version: v2.1.1 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
 #   - 파싱 로직 완전 재작성
+#   - f-string 문법 오류 수정
+#   - 별점 줄바꿈 추가
 # ================================================================
 
 import streamlit as st
@@ -559,8 +561,7 @@ if st.session_state.final_image:
                     face_info, error = analyze_face_info(available_models[0], image)
                     if face_info:
                         # ===== 디버그: AI 응답 전체 출력 =====
-                        st.info(f"🔍 AI 원본 응답:
-{face_info}")
+                        st.info(f"🔍 AI 원본 응답:\n{face_info}")
                         
                         # 성별 추출 - 개선된 방식
                         gender = "사람"
@@ -618,11 +619,7 @@ if st.session_state.final_image:
                                     break
                         
                         # 디버그 출력
-                        st.success(f"✅ 파싱 결과:
-성별={gender}
-나이={age_range}
-현재직업={current_jobs}
-어울리는직업={suitable_jobs}")
+                        st.success(f"✅ 파싱 결과:\n성별={gender}\n나이={age_range}\n현재직업={current_jobs}\n어울리는직업={suitable_jobs}")
                         
                 except Exception as e:
                     st.error(f"⚠️ 파싱 에러: {e}")
@@ -861,24 +858,32 @@ if st.session_state.final_image:
             # ===== 📊 기본 분석 결과 표시 =====
             st.write("---")
             st.subheader("📊 기본 분석 결과")
+            st.write("")  # 여백
             
-            # result_text 생성
+            # result_text 생성 - 줄바꿈 개선
             result_parts = []
             result_parts.append(f"**성별**: {gender}")
+            result_parts.append("")  # 빈 줄
+            
             if age_range:
                 result_parts.append(f"**추정 나이**: {age_range}")
+                result_parts.append("")  # 빈 줄
             
             if current_jobs:
                 job_list = ", ".join(current_jobs)
-                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%): {job_list}")
+                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%):")
+                result_parts.append(f"  {job_list}")
+                result_parts.append("")  # 빈 줄
             
             if suitable_jobs:
                 job_list = ", ".join(suitable_jobs)
-                result_parts.append(f"**어울리는 직업** (100% 관상): {job_list}")
+                result_parts.append(f"**어울리는 직업** (100% 관상):")
+                result_parts.append(f"  {job_list}")
             
-            result_text = "\n\n".join(result_parts)
+            result_text = "\n".join(result_parts)
             st.info(result_text)
             
+            st.write("")  # 여백
             st.markdown("💫 *추정이 맞으면 좋겠구려!*")
             st.write("---")
             # ===== 기본 분석 결과 표시 끝 =====
@@ -1006,24 +1011,32 @@ if st.session_state.final_image:
             # ===== 📊 기본 분석 결과 표시 =====
             st.write("---")
             st.subheader("📊 기본 분석 결과")
+            st.write("")  # 여백
             
-            # result_text 생성
+            # result_text 생성 - 줄바꿈 개선
             result_parts = []
             result_parts.append(f"**성별**: {gender}")
+            result_parts.append("")  # 빈 줄
+            
             if age_range:
                 result_parts.append(f"**추정 나이**: {age_range}")
+                result_parts.append("")  # 빈 줄
             
             if current_jobs:
                 job_list = ", ".join(current_jobs)
-                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%): {job_list}")
+                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%):")
+                result_parts.append(f"  {job_list}")
+                result_parts.append("")  # 빈 줄
             
             if suitable_jobs:
                 job_list = ", ".join(suitable_jobs)
-                result_parts.append(f"**어울리는 직업** (100% 관상): {job_list}")
+                result_parts.append(f"**어울리는 직업** (100% 관상):")
+                result_parts.append(f"  {job_list}")
             
-            result_text = "\n\n".join(result_parts)
+            result_text = "\n".join(result_parts)
             st.info(result_text)
             
+            st.write("")  # 여백
             st.markdown("💫 *추정이 맞으면 좋겠구려!*")
             st.write("---")
             # ===== 기본 분석 결과 표시 끝 =====
