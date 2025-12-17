@@ -656,31 +656,8 @@ if st.session_state.final_image:
                 if suitable_jobs:
                     job_info += f"\n- 관상으로 본 어울리는 직업: {', '.join(suitable_jobs)}"
                     
-                    # 사용자 입력 직업 확인 후 매칭 분석
-                    actual_job = st.session_state.get('user_actual_job', '')
-                    
-                    if actual_job:
-                        # 실제 직업과 어울리는 직업 비교
-                        matching = any(sj.lower() in actual_job.lower() or actual_job.lower() in sj.lower() 
-                                     for sj in suitable_jobs)
-                        if matching:
-                            job_match_comment = f"""
-
-**운명 매칭 분석:**
-오호라! 그대가 하고 계신 '{actual_job}' 일이 마침 어울리는 직업과 일치하는군요!
-그대는 운명이 정한 길을 걷고 계십니다. 이 길을 계속 가면 큰 성취를 이룰 것이오.
-그대의 얼굴에서 붉은 빛이 보이는군요! 하늘이 정한 길입니다!
-"""
-                        else:
-                            job_match_comment = f"""
-
-**운명 매칭 분석:**
-흔, 현재 '{actual_job}' 일도 나쁘지 않으나, 관상으로 보니 그대는 {', '.join(suitable_jobs)} 같은 분야가 더 잘 맞는 것 같소.
-현재 길에서 성실히 경험을 쌓으면서, 향후 이런 분야로 길을 틀어보는 것도 고려해보시오.
-그대의 얼굴에서 변화의 기운이 보이는군요! 새로운 기회가 올 것이오.
-"""
-                    elif current_jobs:
-                        # 사용자 입력 없으면 추정 직업으로 비교
+                    # 현재 직업과 어울리는 직업 비교
+                    if current_jobs:
                         matching = any(cj in suitable_jobs or sj in current_jobs 
                                      for cj in current_jobs for sj in suitable_jobs)
                         if matching:
@@ -886,31 +863,7 @@ if st.session_state.final_image:
             
             if age_range or current_jobs:
                 st.info(result_text)
-                
-                # 어울리는 직업도 표시 (이미 result_text에 포함되어 있으므로 생략)
-                
-                # 직업 입력 필드
-                st.write("---")
-                st.markdown("### ✍️ 추정이 맞나요?")
-                st.write("")
-                
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    user_job = st.text_input(
-                        "실제 직업을 입력해주세요 (선택사항)",
-                        placeholder="예: 개발자, 디자이너, 학생 등",
-                        key="user_job_result"
-                    )
-                with col2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🎤", key="voice_input_result", help="음성 입력 (준비 중)"):
-                        st.info("음성 입력 기능은 곧 제공됩니다!")
-                
-                # 사용자가 직업을 입력한 경우
-                if user_job:
-                    st.session_state.user_actual_job = user_job
-                    st.success(f"✅ 입력하신 직업: **{user_job}**")
-                
+                st.markdown("**추정이 맞으면 좋겠구려!** 🎯")
                 st.write("")
                 st.write("---")
             
