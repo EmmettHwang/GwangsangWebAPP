@@ -395,6 +395,15 @@ st.markdown("""
         border-radius: 10px;
         padding: 20px;
     }
+    /* 상태 텍스트 스타일 조정 */
+    .status-text {
+        font-size: 16px;
+        color: #666;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #7D5A5A;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -474,54 +483,96 @@ if st.session_state.final_image:
             status_text = st.empty()
 
             # 1단계: 장군신 찾기
-            status_text.markdown("### 📡 당직 서는 장군신을 찾는 중이오...")
+            status_text.markdown("<p class='status-text'>📡 당직 서는 장군신을 찾는 중이오...</p>", unsafe_allow_html=True)
             progress_bar.progress(5)
             
             available_models = get_all_available_models()
 
             # 2단계: 관상 분석 프로세스 시뮬레이션
             analysis_steps = [
-                "1단계: 이마의 넓이와 초년운 측정 중...",
-                "2단계: 눈썹의 기세와 형제운 분석 중...",
-                "3단계: 코의 높이와 재물운 계산 중...",
-                "4단계: 입술의 모양과 말년운 확인 중...",
-                "5단계: 얼굴의 전체적인 조화(오행) 분석 중..."
+                "🔍 1단계: 이마의 넓이와 초년운 측정 중...",
+                "🔍 2단계: 눈썹의 기세와 형제운 분석 중...",
+                "🔍 3단계: 코의 높이와 재물운 계산 중...",
+                "🔍 4단계: 입술의 모양과 말년운 확인 중...",
+                "🔍 5단계: 얼굴의 전체적인 조화(오행) 분석 중..."
             ]
             
             for i, step in enumerate(analysis_steps):
-                status_text.markdown(f"### 🔍 {step}")
+                status_text.markdown(f"<p class='status-text'>{step}</p>", unsafe_allow_html=True)
                 progress_bar.progress(5 + (i + 1) * 15)
                 time.sleep(1.0)
 
-            # 3단계: AI 프롬프트
+            # 3단계: AI 프롬프트 (더 상세하게 수정)
             prompt = """
 당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
-이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 아주 상세하고 재미있게 봐주세요.
-말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려")을 사용하세요.
+이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 **매우 상세하고** 재미있게 봐주세요.
+말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려", "~하옵니다")을 사용하세요.
 
 [아솔의 감정서 양식]
 
-🎭 **인상 총평**
-- 첫인상과 전체적인 기운
-- 삼정(초년, 중년, 말년) 운세
+🎭 **인상 총평 및 삼정(三停) 분석**
+- **첫인상**: 이 사람의 첫인상과 전체적인 기운 묘사 (최소 3-4문장)
+- **상정(上停, 이마 부분)**: 이마의 넓이, 높이, 굴곡으로 보는 초년운(0-30세) 상세 분석
+- **중정(中停, 눈썹-코)**: 눈썹과 코의 형태로 보는 중년운(30-50세) 상세 분석  
+- **하정(下停, 인중-턱)**: 입과 턱의 형태로 보는 말년운(50세 이후) 상세 분석
 
-💰 **재물운**
-- 코와 광대뼈로 보는 재물 축적 능력
-- 돈을 모으는 스타일과 시기
+💰 **재물운 및 사업운**
+- **코(재물궁)**: 코의 크기, 높이, 콧방울 상태로 보는 재물 축적 능력 (최소 4-5문장)
+- **광대뼈**: 권력운과 리더십, 사회적 지위 분석
+- **돈을 버는 스타일**: 투자형인지, 근면형인지, 사업형인지 구체적으로 설명
+- **재물이 들어오는 시기**: 20대, 30대, 40대 중 언제가 가장 좋은지
+- **주의할 점**: 낭비 습관이나 재물 손실 가능성
 
-❤️ **연애 및 애정운**
-- 눈매와 입술로 보는 이성운
-- 도화살 유무와 연애 스타일
+❤️ **연애운 및 애정운**
+- **눈매(처첩궁)**: 눈의 크기, 각도, 눈빛으로 보는 이성운 (최소 4-5문장)
+- **입술**: 애정 표현 방식과 연애 스타일
+- **도화살 유무**: 이성에게 인기가 많은 타입인지
+- **이상형**: 어떤 스타일의 사람을 좋아하는지
+- **결혼운**: 언제쯤 결혼할 가능성이 높은지
+- **배우자의 특징**: 미래 배우자의 성격이나 외모 특징
 
-🍀 **아솔의 특별 처방**
-- 주의해야 할 점
-- 운을 더 높이는 방법
+🏆 **직업운 및 적성**
+- **이마와 눈썹**: 학업 능력과 지적 수준
+- **적합한 직업군**: 구체적인 직업 3-5가지 추천
+- **승진운과 출세운**: 조직에서의 성공 가능성
+- **창업 적성**: 사업가 기질이 있는지
 
-**중요한 점:**
-- 구체적인 세부사항을 언급하며 신빙성을 높이세요
-- 긍정적이면서도 현실적인 조언을 섞으세요
-- 이모티콘과 강조 문법(**굵게**, *이탤릭*)을 적절히 사용하세요
-- 재미있고 읽기 쉽게 작성하되, 너무 짧지 않게 충분히 상세하게 써주세요
+🍀 **건강운 및 주의사항**
+- **얼굴 색**: 현재 건강 상태
+- **특정 부위**: 주의해야 할 신체 부위
+- **건강 관리 조언**
+
+👥 **대인관계 및 성격**
+- **귀**: 복과 장수, 재물 흡수력
+- **눈썹**: 형제운, 친구운
+- **입**: 말솜씨와 대인관계 능력
+- **성격 특징**: 장점 3가지, 단점 2가지
+
+🔮 **아솔의 특별 처방**
+- **개운 방향**: 길한 방향 (동서남북 중)
+- **개운 색상**: 도움이 되는 색깔
+- **주의해야 할 시기**: 조심해야 할 나이나 시기
+- **운을 높이는 습관**: 구체적인 행동 지침 3가지
+- **부적 제안**: 몸에 지니면 좋을 물건이나 액세서리
+
+🌟 **종합 평가 (100점 만점)**
+- 재물운: X점 / 100점
+- 애정운: X점 / 100점  
+- 건강운: X점 / 100점
+- 직업운: X점 / 100점
+- 종합 평가: 한 줄 요약
+
+📜 **아솔의 한마디**
+- 마지막으로 이 사람에게 꼭 해주고 싶은 말 (2-3문장)
+
+**작성 지침:**
+1. 각 항목마다 **최소 3-4문장 이상** 상세하게 작성
+2. 구체적인 나이, 시기, 숫자를 언급하여 신빙성 높이기
+3. 긍정 70% + 현실적 조언 30% 비율 유지
+4. 이모티콘 적절히 사용 (과하지 않게)
+5. **굵게**, *이탤릭* 강조 문법 활용
+6. 전체 분량: 최소 800자 이상 작성
+7. 재미있고 읽기 쉽게, 하지만 충분히 전문적으로
 """
             
             # 4단계: 이미지 열기 및 모델 시도
@@ -531,7 +582,7 @@ if st.session_state.final_image:
             
             for model_name in available_models:
                 display_name = model_name.replace('models/', '').replace('gemini-', '').upper()
-                status_text.markdown(f"### ⚡ **{display_name}** 장군신 소환 중...")
+                status_text.markdown(f"<p class='status-text'>⚡ <strong>{display_name}</strong> 장군신 소환 중...</p>", unsafe_allow_html=True)
                 progress_bar.progress(85)
                 
                 response, error = try_model_with_image(model_name, prompt, image)
@@ -540,7 +591,7 @@ if st.session_state.final_image:
                     successful_model = display_name
                     break
                 elif error == "quota_exceeded":
-                    status_text.markdown(f"### 💤 {display_name} 장군신이 휴식 중... 다음 장군신 호출 중...")
+                    status_text.markdown(f"<p class='status-text'>💤 {display_name} 장군신이 휴식 중... 다음 장군신 호출 중...</p>", unsafe_allow_html=True)
                     time.sleep(0.8)
             
             # 5단계: 결과 처리
@@ -550,7 +601,7 @@ if st.session_state.final_image:
                 status_text.empty()
                 st.stop()
             
-            status_text.markdown(f"### ✅ **{successful_model}** 장군신이 감정서를 작성했소!")
+            status_text.markdown(f"<p class='status-text'>✅ <strong>{successful_model}</strong> 장군신이 감정서를 작성했소!</p>", unsafe_allow_html=True)
             progress_bar.progress(100)
             time.sleep(1.0)
             
@@ -601,7 +652,7 @@ if st.session_state.final_image:
             
             <script>
                 function copyResult() {{
-                    var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp.streamlit.app/";
+                    var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp-ryes95aziswadr3h9bhcug.streamlit.app/";
                     
                     var messageDiv = document.getElementById('copy-result-msg');
                     var button = event.target;
