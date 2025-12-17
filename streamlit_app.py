@@ -584,16 +584,29 @@ if st.session_state.final_image:
                 except:
                     pass
             
-            # 분석 결과 UI 개선
+            # 분석 결과 표시 (UI 개선)
             result_text = f"### 📊 기본 분석 결과\n\n"
             result_text += f"👤 **성별**: {gender}\n\n"
             if age_range:
                 result_text += f"📅 **추정 나이**: {age_range}\n\n"
             
             if current_jobs:
-                result_text += f"💼 **현재 직업 추정**: {', '.join(current_jobs)}\n\n"
+                result_text += f"💼 **현재 직업 추정**: {', '.join(current_jobs)}"
             
-            if age_range or current_jobs:
+            if suitable_jobs:
+                result_text += f"\n\n✨ **어울리는 직업**: {', '.join(suitable_jobs)}"
+                
+                # 현재 직업과 어울리는 직업 비교
+                if current_jobs and suitable_jobs:
+                    # 겹치는 직업이 있는지 확인
+                    matching = any(cj in suitable_jobs or sj in current_jobs 
+                                 for cj in current_jobs for sj in suitable_jobs)
+                    if matching:
+                        result_text += "\n\n🎉 **오호! 그대는 운명에 맞게 살고 있구나!**"
+                    else:
+                        result_text += "\n\n💡 **홍미롭군요. 어울리는 분야로의 전환도 고려해보시오.**"
+            
+            if age_range or current_jobs or suitable_jobs:
                 st.info(result_text)
                 
                 # 직업 입력 필드 추가
@@ -643,7 +656,7 @@ if st.session_state.final_image:
                 if suitable_jobs:
                     job_info += f"\n- 관상으로 본 어울리는 직업: {', '.join(suitable_jobs)}"
                     
-                    # 사용자 입력 직업 확인
+                    # 사용자 입력 직업 확인 후 매칭 분석
                     actual_job = st.session_state.get('user_actual_job', '')
                     
                     if actual_job:
@@ -675,13 +688,18 @@ if st.session_state.final_image:
 
 **운명 매칭 분석:**
 현재 그대가 하고 있는 일({', '.join(current_jobs)})이 관상으로 본 어울리는 직업과 일치하는군요! 
-오호! 그대는 운명에 맞게 살고 있습니다.
+오호! 그대는 운명에 맞게 살고 있습니다. 
+이 길을 계속 가면 큰 성취를 이룰 것이오. 
+그대의 얼굴에서 붉은 빛이 보이는군요!
 """
                         else:
                             job_match_comment = f"""
 
 **운명 매칭 분석:**
-홍, 현재 일({', '.join(current_jobs)})도 좋으나, {', '.join(suitable_jobs)} 분야도 고려해보시오.
+홍, 현재 그대가 하고 있는 일({', '.join(current_jobs)})도 좋지만,
+관상으로 보니 {', '.join(suitable_jobs)} 계열의 직업이 그대의 운명과 더 잘 맞는 것 같소.
+향후 새로운 길을 모색한다면, 이 분야를 한 번 고려해보는 것도 좋겠구려.
+그대의 얼굴에서 변화의 기운이 보이는군요!
 """
                 
                 gender_age_info = f"""
