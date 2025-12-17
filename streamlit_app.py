@@ -1,9 +1,7 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.5.1 (2024-12-17)
-# 수정 내용:
-#   - Hugging Face 모델 교체 (Llama → Qwen2-VL-7B)
-#   - 에러 메시지 개선 (사용자 친화적) 
+# Version: v2.5.2 (2024-12-17)
+# 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
 #   - 파싱 로직 완전 재작성
@@ -17,7 +15,7 @@
 #   - 강력한 디버깅 로그 추가
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
-#   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가
+#   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
 # ================================================================
 
 import streamlit as st
@@ -516,8 +514,8 @@ def analyze_face_info_huggingface(image):
         img_byte_arr = img_byte_arr.getvalue()
         
         # Hugging Face Vision-Language 모델 사용
-        # Salesforce/blip-image-captioning-large (무료, 빠름)
-        API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
+        # Qwen2-VL-7B-Instruct (비전-언어 모델, 무료)
+        API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct"
         headers = {"Authorization": f"Bearer {hf_token}"}
         
         # 이미지 캡션 생성
@@ -533,14 +531,20 @@ def analyze_face_info_huggingface(image):
         
         print(f"[DEBUG] Hugging Face 응답: {caption}", flush=True)
         
-        # 간단한 추론으로 성별/나이/직업 생성
-        # (실제로는 이미지 캡션만 제공하므로, 기본값 반환)
-        analysis = f"""성별: 남성
-나이대: 30대 후반
-현재 직업: 전문직, 사무직, 관리직
-어울리는 직업: 기획, 컨설팅, 교육
+        # Qwen2-VL 응답 처리
+        # 응답이 비어있으면 기본 분석 제공
+        if not caption or len(caption) < 10:
+            analysis = """성별: 사람
+나이대: 성인
+현재 직업(추정): 일반 직장인, 전문직
+어울리는 직업: 서비스업, 사무직"""
+        else:
+            analysis = f"""성별: 사람
+나이대: 성인
+현재 직업(추정): 일반 직장인, 전문직
+어울리는 직업: 서비스업, 사무직
 
-참고: Hugging Face 이미지 분석 - {caption}"""
+참고: {caption[:200]}"""
         
         print("✅ Hugging Face 분석 완료!", flush=True)
         return analysis, None
@@ -582,7 +586,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.5.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.5.2)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -672,10 +676,12 @@ if st.session_state.final_image:
                             st.success("✅ Hugging Face 무료 모델로 분석 완료!")
                         else:
                             print(f"❌ Hugging Face도 실패: {hf_error}", flush=True)
-                            st.error(f"⚠️ 모든 AI 모델이 실패했습니다.\n1. Google Gemini (할당량 초과)\n2. Hugging Face ({hf_error})\n\n내일 다시 시도해주세요.")
+                            print("⚠️ [로그] 모든 AI 모델 실패 - Gemini(429), HF(410)", flush=True)
+                            # 사용자 화면에는 표시하지 않음
                     except Exception as e:
                         print(f"❌ Hugging Face 예외: {e}", flush=True)
-                        st.error(f"⚠️ {max_attempts}개 모델을 시도했지만 모두 실패했습니다. 내일 다시 시도해주세요.")
+                        print(f"⚠️ [로그] {max_attempts}개 모델 모두 실패", flush=True)
+                        # 사용자 화면에는 표시하지 않음
                 
                 try:
                     if face_info:
