@@ -857,18 +857,19 @@ if st.session_state.final_image:
             st.session_state.last_result = response.text
             st.session_state.last_model = successful_model
             
-            # === 성별/나이/직업 결과 먼저 표시 ===
+            # === 1. 성별/나이/직업 결과 먼저 표시 ===
             st.write("---")
-            st.write("")  # 여백
+            st.write("")
             
-            if age_range or current_jobs:
+            # result_text가 정의되어 있고 내용이 있으면 표시
+            if 'result_text' in locals() and result_text and (age_range or current_jobs or suitable_jobs):
                 st.info(result_text)
                 st.markdown("**추정이 맞으면 좋겠구려!** 🎯")
                 st.write("")
                 st.write("---")
+                st.write("")
             
-            # === 관상 감정서 ===
-            st.write("")
+            # === 2. 관상 감정서 ===
             st.subheader(f"📜 관상가 아솔의 감정서")
             st.caption(f"*by {successful_model} 장군신*")
             st.write("")
