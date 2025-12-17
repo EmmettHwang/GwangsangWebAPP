@@ -426,6 +426,49 @@ def get_all_available_models():
     except:
         return ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-2.0-flash-exp']
 
+def analyze_face_info(model_name, image):
+    """얼굴에서 성별, 나이대, 직업 분석 (관상학 + 의상 분석)"""
+    try:
+        model = genai.GenerativeModel(model_name)
+        analysis_prompt = """
+이 사진을 보고 다음 정보를 분석해주세요:
+
+1. 성별: 남성 또는 여성
+
+2. 추정 나이대: 10대, 20대 초반, 20대 후반, 30대 초반, 30대 후반, 40대 초반, 40대 후반, 50대 초반, 50대 후반, 60대 초반, 60대 후반, 70대, 80대 이상 중 하나
+
+3. 현재 직업 추정 (70% 의상/분위기 + 30% 관상학):
+   - 의상 분석 (70%): 정장, 캐주얼, 유니폼, 액세서리, 메이크업, 헤어스타일 등
+   - 관상학 분석 (30%):
+     * 이마: 넓고 밝으면 지적 직업 (교수, 연구원, 기획자)
+     * 눈빛: 날카로우면 분석/전문직 (분석가, 회계사, 개발자)
+     * 코: 크고 단단하면 재물 관련 (금융, 사업가, 영업)
+     * 입: 크고 표현력 좋으면 소통 직업 (강사, 방송인, 마케터)
+     * 턱: 사각지고 강하면 리더십 (경영인, 관리자, 공무원)
+     * 귀: 크고 두껰우면 복 많은 직업 (안정적 직장, 전문직)
+   - 위 분석을 종합하여 현재 직업 3가지 추정
+
+4. 어울리는 직업 (100% 관상학):
+   - 얼굴의 오행(금목수화토), 삼정(상중하정), 오관(이목구비이) 분석
+   - 위 관상학적 특징으로 본 이 사람의 운명에 맞는 천직 직업 3가지
+
+다음 형식으로만 답변해주세요:
+성별: [남성/여성]
+나이대: [구체적인 나이대]
+현재 직업: [직업1], [직업2], [직업3]
+어울리는 직업: [직업1], [직업2], [직업3]
+
+예시:
+성별: 여성
+나이대: 20대 후반
+현재 직업: 마케팅, 디자인, 기획
+어울리는 직업: 교육, 컨설팅, 미디어
+"""
+        response = model.generate_content([analysis_prompt, image])
+        return response.text, None
+    except Exception as e:
+        return None, str(e)
+
 def try_model_with_image(model_name, prompt, image):
     """특정 모델로 이미지 분석 시도"""
     try:
@@ -484,11 +527,88 @@ if st.session_state.final_image:
 
             # 1단계: 장군신 찾기
             status_text.markdown("<p class='status-text'>📡 당직 서는 장군신을 찾는 중이오...</p>", unsafe_allow_html=True)
-            progress_bar.progress(5)
+            progress_bar.progress(3)
             
             available_models = get_all_available_models()
-
-            # 2단계: 관상 분석 프로세스 시뮬레이션
+            
+            # 2단계: 이미지 열기
+            image = Image.open(st.session_state.final_image)
+            
+            # 3단계: 성별/나이/직업 분석
+            status_text.markdown("<p class='status-text'>🧐 얼굴 기본 정보 분석 중 (성별, 나이, 직업)...</p>", unsafe_allow_html=True)
+            progress_bar.progress(8)
+            
+            face_info = None
+            gender = "사람"
+            age_range = ""
+            current_jobs = []
+            suitable_jobs = []
+            
+            # 첫 번째 모델로 성별/나이/직업 분석 시도
+            if len(available_models) > 0:
+                try:
+                    face_info, error = analyze_face_info(available_models[0], image)
+                    if face_info:
+                        # 성별 추출
+                        if "남성" in face_info:
+                            gender = "남성"
+                        elif "여성" in face_info:
+                            gender = "여성"
+                        
+                        # 나이대 추출 (더 세분화)
+                        age_keywords = [
+                            "80대 이상", "70대", 
+                            "60대 후반", "60대 초반",
+                            "50대 후반", "50대 초반",
+                            "40대 후반", "40대 초반",
+                            "30대 후반", "30대 초반",
+                            "20대 후반", "20대 초반",
+                            "10대"
+                        ]
+                        for age_keyword in age_keywords:
+                            if age_keyword in face_info:
+                                age_range = age_keyword
+                                break
+                        
+                        # 현재 직엁 추출
+                        if "현재 직업:" in face_info:
+                            job_line = face_info.split("현재 직업:")[1].strip().split("\n")[0]
+                            current_jobs = [j.strip() for j in job_line.replace(",", " ").split() if j.strip()]
+                            current_jobs = current_jobs[:3]
+                        
+                        # 어울리는 직엁 추출
+                        if "어울리는 직업:" in face_info:
+                            suitable_line = face_info.split("어울리는 직업:")[1].strip().split("\n")[0]
+                            suitable_jobs = [j.strip() for j in suitable_line.replace(",", " ").split() if j.strip()]
+                            suitable_jobs = suitable_jobs[:3]
+                except:
+                    pass
+            
+            # 분석 결과 표시
+            result_text = f"👤 **{gender}**"
+            if age_range:
+                result_text += f", **{age_range}**"
+            
+            if current_jobs:
+                result_text += f"\n\n💼 현재 직업 추정: {', '.join(current_jobs)}"
+            
+            if suitable_jobs:
+                result_text += f"\n✨ 어울리는 직업: {', '.join(suitable_jobs)}"
+                
+                # 현재 직업과 어울리는 직업 비교
+                if current_jobs and suitable_jobs:
+                    # 겹치는 직업이 있는지 확인
+                    matching = any(cj in suitable_jobs or sj in current_jobs 
+                                 for cj in current_jobs for sj in suitable_jobs)
+                    if matching:
+                        result_text += "\n\n🎉 **오호! 그대는 운명에 맞게 살고 있구나!**"
+                    else:
+                        result_text += "\n\n💡 **홍미롭군요. 어울리는 분야로의 전환도 고려해보시오.**"
+            
+            if age_range or current_jobs or suitable_jobs:
+                st.info(result_text)
+            
+            # 4단계: 관상 분석 프로세스 시뮬레이션
             analysis_steps = [
                 "🔍 1단계: 이마의 넓이와 초년운 측정 중...",
                 "🔍 2단계: 눈썹의 기세와 형제운 분석 중...",
@@ -499,14 +619,62 @@ if st.session_state.final_image:
             
             for i, step in enumerate(analysis_steps):
                 status_text.markdown(f"<p class='status-text'>{step}</p>", unsafe_allow_html=True)
-                progress_bar.progress(5 + (i + 1) * 15)
+                progress_bar.progress(8 + (i + 1) * 14)
                 time.sleep(1.0)
 
-            # 3단계: AI 프롬프트 (더 상세하고 후한 점수)
-            prompt = """
+            # 5단계: AI 프롬프트 (성별/나이/직업 정보 포함)
+            gender_age_info = ""
+            if gender and age_range:
+                job_info = ""
+                job_match_comment = ""
+                
+                if current_jobs:
+                    job_info += f"\n- 추정 현재 직업: {', '.join(current_jobs)}"
+                
+                if suitable_jobs:
+                    job_info += f"\n- 관상으로 본 어울리는 직업: {', '.join(suitable_jobs)}"
+                    
+                    # 현재 직엁과 어울리는 직업 비교
+                    if current_jobs:
+                        matching = any(cj in suitable_jobs or sj in current_jobs 
+                                     for cj in current_jobs for sj in suitable_jobs)
+                        if matching:
+                            job_match_comment = f"""
+
+**직업운 특별 멘트:**
+현재 그대가 하고 있는 일({', '.join(current_jobs)})이 관상으로 본 어울리는 직업과 일치하는군요! 
+오호! 그대는 운명에 맞게 살고 있습니다. 
+이 길을 계속 가면 큰 성취를 이룰 것이오. 
+그대의 얼굴에서 붉은 빛이 보이는군요!
+"""
+                        else:
+                            job_match_comment = f"""
+
+**직업운 특별 멘트:**
+홍, 현재 그대가 하고 있는 일({', '.join(current_jobs)})도 좋지만,
+관상으로 보니 {', '.join(suitable_jobs)} 계열의 직업이 그대의 운명과 더 잘 맞는 것 같소.
+향후 새로운 길을 모색한다면, 이 분야를 한 번 고려해보는 것도 좋겠구려.
+그대의 얼굴에서 변화의 기운이 보이는군요!
+"""
+                
+                gender_age_info = f"""
+
+**분석 대상 정보:**
+- 성별: {gender}
+- 추정 나이대: {age_range}{job_info}{job_match_comment}
+
+위 정보를 바탕으로 {gender}의 {age_range} 시기에 맞는 관상을 봐주세요.
+예를 들어:
+- {gender}의 특성에 맞는 연애운, 결혼운, 직업운 분석
+- {age_range}에 맞는 현재와 미래 운세 예측
+- {age_range} 시기에 주의할 점과 기회
+- 직업 적성 분석 시 위 직업 정보 고려
+"""
+            
+            prompt = f"""
 당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
 이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 **매우 상세하고 긍정적으로** 재미있게 봐주세요.
-말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려", "~하옵니다")을 사용하세요.
+말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려", "~하옵니다")을 사용하세요.{gender_age_info}
 
 [아솔의 감정서 양식]
 
@@ -611,8 +779,7 @@ if st.session_state.final_image:
 10. 단점보다는 보완 가능한 점으로 부드럽게 표현
 """
             
-            # 4단계: 이미지 열기 및 모델 시도
-            image = Image.open(st.session_state.final_image)
+            # 6단계: 관상 분석 실행
             response = None
             successful_model = None
             
@@ -630,7 +797,7 @@ if st.session_state.final_image:
                     status_text.markdown(f"<p class='status-text'>💤 {display_name} 장군신이 휴식 중... 다음 장군신 호출 중...</p>", unsafe_allow_html=True)
                     time.sleep(0.8)
             
-            # 5단계: 결과 처리
+            # 7단계: 결과 처리
             if response is None:
                 st.error("⚠️ 모든 장군신이 휴식 중입니다. 잠시 후 다시 시도해주세요.")
                 progress_bar.empty()
