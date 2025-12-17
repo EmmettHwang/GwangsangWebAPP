@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.1.3 (2024-12-17)
+# Version: v2.1.4 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -9,6 +9,7 @@
 #   - 별점 줄바꿈 추가
 #   - split() 문법 오류 긴급 수정
 #   - 콘솔 디버그 출력 추가
+#   - 들여쓰기 오류 긴급 수정
 # ================================================================
 
 import streamlit as st
@@ -560,7 +561,7 @@ if st.session_state.final_image:
             current_jobs = []
             suitable_jobs = []
             
-# 첫 번째 모델로 성별/나이/직업 분석 시도
+            # 첫 번째 모델로 성별/나이/직업 분석 시도
             if len(available_models) > 0:
                 try:
                     face_info, error = analyze_face_info(available_models[0], image)
