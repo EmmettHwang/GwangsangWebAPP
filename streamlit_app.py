@@ -1,12 +1,13 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.1.1 (2024-12-17)
+# Version: v2.1.2 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
 #   - 파싱 로직 완전 재작성
 #   - f-string 문법 오류 수정
 #   - 별점 줄바꿈 추가
+#   - split() 문법 오류 긴급 수정
 # ================================================================
 
 import streamlit as st
@@ -566,8 +567,7 @@ if st.session_state.final_image:
                         # 성별 추출 - 개선된 방식
                         gender = "사람"
                         if "성별" in face_info:
-                            for line in face_info.split("
-"):
+                            for line in face_info.split("\n"):
                                 if "성별" in line:
                                     if "남성" in line or "남자" in line:
                                         gender = "남자 사람"
@@ -595,8 +595,7 @@ if st.session_state.final_image:
                         # 현재 직업 추출 - 개선된 방식
                         current_jobs = []
                         if "현재 직업" in face_info:
-                            for line in face_info.split("
-"):
+                            for line in face_info.split("\n"):
                                 if "현재 직업" in line:
                                     # "현재 직업:" 이후 텍스트 추출
                                     job_text = line.split(":", 1)[-1].strip()
@@ -608,8 +607,7 @@ if st.session_state.final_image:
                         # 어울리는 직업 추출 - 개선된 방식
                         suitable_jobs = []
                         if "어울리는 직업" in face_info:
-                            for line in face_info.split("
-"):
+                            for line in face_info.split("\n"):
                                 if "어울리는 직업" in line:
                                     # "어울리는 직업:" 이후 텍스트 추출
                                     job_text = line.split(":", 1)[-1].strip()
