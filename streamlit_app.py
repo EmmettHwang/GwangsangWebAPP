@@ -550,10 +550,16 @@ if st.session_state.final_image:
                     face_info, error = analyze_face_info(available_models[0], image)
                     if face_info:
                         # 성별 추출
-                        if "남성" in face_info:
-                            gender = "남성"
-                        elif "여성" in face_info:
-                            gender = "여성"
+                        if "성별:" in face_info or "성별 :" in face_info:
+                            gender_line = face_info.split("성별")[1].split("\n")[0]
+                            if "남성" in gender_line or "남자" in gender_line:
+                                gender = "남자 사람"
+                            elif "여성" in gender_line or "여자" in gender_line:
+                                gender = "여자 사람"
+                        elif "남성" in face_info or "남자" in face_info:
+                            gender = "남자 사람"
+                        elif "여성" in face_info or "여자" in face_info:
+                            gender = "여자 사람"
                         
                         # 나이대 추출 (더 세분화)
                         age_keywords = [
@@ -570,16 +576,18 @@ if st.session_state.final_image:
                                 age_range = age_keyword
                                 break
                         
-                        # 현재 직엁 추출
-                        if "현재 직업:" in face_info:
-                            job_line = face_info.split("현재 직업:")[1].strip().split("\n")[0]
-                            current_jobs = [j.strip() for j in job_line.replace(",", " ").split() if j.strip()]
+                        # 현재 직업 추출
+                        if "현재 직업:" in face_info or "현재 직업 :" in face_info:
+                            job_line = face_info.split("현재 직업")[1].split("\n")[0]
+                            job_line = job_line.replace(":", "").strip()
+                            current_jobs = [j.strip() for j in job_line.split(",") if j.strip()]
                             current_jobs = current_jobs[:3]
                         
-                        # 어울리는 직엁 추출
-                        if "어울리는 직업:" in face_info:
-                            suitable_line = face_info.split("어울리는 직업:")[1].strip().split("\n")[0]
-                            suitable_jobs = [j.strip() for j in suitable_line.replace(",", " ").split() if j.strip()]
+                        # 어울리는 직업 추출
+                        if "어울리는 직업:" in face_info or "어울리는 직업 :" in face_info:
+                            suitable_line = face_info.split("어울리는 직업")[1].split("\n")[0]
+                            suitable_line = suitable_line.replace(":", "").strip()
+                            suitable_jobs = [j.strip() for j in suitable_line.split(",") if j.strip()]
                             suitable_jobs = suitable_jobs[:3]
                 except:
                     pass
@@ -634,7 +642,7 @@ if st.session_state.final_image:
                 if suitable_jobs:
                     job_info += f"\n- 관상으로 본 어울리는 직업: {', '.join(suitable_jobs)}"
                     
-                    # 현재 직엁과 어울리는 직업 비교
+                    # 현재 직업과 어울리는 직업 비교
                     if current_jobs:
                         matching = any(cj in suitable_jobs or sj in current_jobs 
                                      for cj in current_jobs for sj in suitable_jobs)
