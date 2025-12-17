@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.1.5 (2024-12-17)
+# Version: v2.2.0 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -10,6 +10,7 @@
 #   - split() 문법 오류 긴급 수정
 #   - 콘솔 디버그 출력 추가
 #   - 중복 except 블록 제거 (문법 오류 수정)
+#   - 화면에 버전 번호 표시 추가
 #   - 들여쓰기 오류 긴급 수정
 # ================================================================
 
@@ -512,7 +513,7 @@ if 'last_model' not in st.session_state:
 
 # --- 10. 메인 UI ---
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.2.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
