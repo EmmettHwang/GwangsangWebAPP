@@ -3,8 +3,11 @@ enableCORS = false
 enableXsrfProtection = true
 enableStaticServing = true
 
+
 [browser]
 gatherUsageStats = false
+serverAddress = "gwangsangapp.streamlit.app"
+serverPort = 443
 
 [theme]
 primaryColor = "#7D5A5A"

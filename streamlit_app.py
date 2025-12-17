@@ -1,3 +1,12 @@
+# ================================================================
+# 관상가 아솔 - Streamlit App
+# Version: v2.1.0 (2024-12-17)
+# 수정 내용: 
+#   - 기본 분석 결과 UI 추가
+#   - AI 응답 디버그 출력
+#   - 파싱 로직 완전 재작성
+# ================================================================
+
 import streamlit as st
 from PIL import Image
 import google.generativeai as genai
@@ -544,52 +553,82 @@ if st.session_state.final_image:
             current_jobs = []
             suitable_jobs = []
             
-            # 첫 번째 모델로 성별/나이/직업 분석 시도
+# 첫 번째 모델로 성별/나이/직업 분석 시도
             if len(available_models) > 0:
                 try:
                     face_info, error = analyze_face_info(available_models[0], image)
                     if face_info:
-                        # 성별 추출
-                        if "성별:" in face_info or "성별 :" in face_info:
-                            gender_line = face_info.split("성별")[1].split("\n")[0]
-                            if "남성" in gender_line or "남자" in gender_line:
-                                gender = "남자 사람"
-                            elif "여성" in gender_line or "여자" in gender_line:
-                                gender = "여자 사람"
-                        elif "남성" in face_info or "남자" in face_info:
-                            gender = "남자 사람"
-                        elif "여성" in face_info or "여자" in face_info:
-                            gender = "여자 사람"
+                        # ===== 디버그: AI 응답 전체 출력 =====
+                        st.info(f"🔍 AI 원본 응답:
+{face_info}")
                         
-                        # 나이대 추출 (더 세분화)
-                        age_keywords = [
-                            "80대 이상", "70대", 
-                            "60대 후반", "60대 초반",
-                            "50대 후반", "50대 초반",
-                            "40대 후반", "40대 초반",
-                            "30대 후반", "30대 초반",
-                            "20대 후반", "20대 초반",
-                            "10대"
-                        ]
-                        for age_keyword in age_keywords:
-                            if age_keyword in face_info:
-                                age_range = age_keyword
-                                break
+                        # 성별 추출 - 개선된 방식
+                        gender = "사람"
+                        if "성별" in face_info:
+                            for line in face_info.split("
+"):
+                                if "성별" in line:
+                                    if "남성" in line or "남자" in line:
+                                        gender = "남자 사람"
+                                    elif "여성" in line or "여자" in line:
+                                        gender = "여자 사람"
+                                    break
                         
-                        # 현재 직업 추출
-                        if "현재 직업:" in face_info or "현재 직업 :" in face_info:
-                            job_line = face_info.split("현재 직업")[1].split("\n")[0]
-                            job_line = job_line.replace(":", "").strip()
-                            current_jobs = [j.strip() for j in job_line.split(",") if j.strip()]
-                            current_jobs = current_jobs[:3]
+                        # 나이대 추출 - 개선된 방식
+                        age_range = ""
+                        if "나이" in face_info:
+                            age_keywords = [
+                                "80대 이상", "80대", "70대 후반", "70대 초반", "70대",
+                                "60대 후반", "60대 초반", "60대",
+                                "50대 후반", "50대 초반", "50대",
+                                "40대 후반", "40대 초반", "40대",
+                                "30대 후반", "30대 초반", "30대",
+                                "20대 후반", "20대 초반", "20대",
+                                "10대 후반", "10대 초반", "10대"
+                            ]
+                            for age_keyword in age_keywords:
+                                if age_keyword in face_info:
+                                    age_range = age_keyword
+                                    break
                         
-                        # 어울리는 직업 추출
-                        if "어울리는 직업:" in face_info or "어울리는 직업 :" in face_info:
-                            suitable_line = face_info.split("어울리는 직업")[1].split("\n")[0]
-                            suitable_line = suitable_line.replace(":", "").strip()
-                            suitable_jobs = [j.strip() for j in suitable_line.split(",") if j.strip()]
-                            suitable_jobs = suitable_jobs[:3]
-                except:
+                        # 현재 직업 추출 - 개선된 방식
+                        current_jobs = []
+                        if "현재 직업" in face_info:
+                            for line in face_info.split("
+"):
+                                if "현재 직업" in line:
+                                    # "현재 직업:" 이후 텍스트 추출
+                                    job_text = line.split(":", 1)[-1].strip()
+                                    # 쉼표로 분리
+                                    jobs = [j.strip() for j in job_text.split(",") if j.strip()]
+                                    current_jobs = jobs[:3]
+                                    break
+                        
+                        # 어울리는 직업 추출 - 개선된 방식
+                        suitable_jobs = []
+                        if "어울리는 직업" in face_info:
+                            for line in face_info.split("
+"):
+                                if "어울리는 직업" in line:
+                                    # "어울리는 직업:" 이후 텍스트 추출
+                                    job_text = line.split(":", 1)[-1].strip()
+                                    # 쉼표로 분리
+                                    jobs = [j.strip() for j in job_text.split(",") if j.strip()]
+                                    suitable_jobs = jobs[:3]
+                                    break
+                        
+                        # 디버그 출력
+                        st.success(f"✅ 파싱 결과:
+성별={gender}
+나이={age_range}
+현재직업={current_jobs}
+어울리는직업={suitable_jobs}")
+                        
+                except Exception as e:
+                    st.error(f"⚠️ 파싱 에러: {e}")
+                    pass
+                except Exception as e:
+                    st.error(f"⚠️ 파싱 에러: {e}")
                     pass
             
             # 분석 결과 표시
@@ -642,7 +681,7 @@ if st.session_state.final_image:
                 if suitable_jobs:
                     job_info += f"\n- 관상으로 본 어울리는 직업: {', '.join(suitable_jobs)}"
                     
-                    # 현재 직업과 어울리는 직업 비교
+                    # 현재 직엁과 어울리는 직업 비교
                     if current_jobs:
                         matching = any(cj in suitable_jobs or sj in current_jobs 
                                      for cj in current_jobs for sj in suitable_jobs)
@@ -823,17 +862,18 @@ if st.session_state.final_image:
             st.write("---")
             st.subheader("📊 기본 분석 결과")
             
-            # result_text 재구성
+            # result_text 생성
             result_parts = []
             result_parts.append(f"**성별**: {gender}")
-            result_parts.append(f"**추정 나이**: {age_range}")
+            if age_range:
+                result_parts.append(f"**추정 나이**: {age_range}")
             
             if current_jobs:
-                job_list = ", ".join(current_jobs[:3])
+                job_list = ", ".join(current_jobs)
                 result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%): {job_list}")
             
             if suitable_jobs:
-                job_list = ", ".join(suitable_jobs[:3])
+                job_list = ", ".join(suitable_jobs)
                 result_parts.append(f"**어울리는 직업** (100% 관상): {job_list}")
             
             result_text = "\n\n".join(result_parts)
@@ -842,7 +882,7 @@ if st.session_state.final_image:
             st.markdown("💫 *추정이 맞으면 좋겠구려!*")
             st.write("---")
             # ===== 기본 분석 결과 표시 끝 =====
-            
+
             
             # 결과 저장
             st.session_state.last_result = response.text
@@ -962,6 +1002,32 @@ if st.session_state.final_image:
             st.error(f"⚠️ 예기치 못한 에러가 났소. (내용: {e})")
             progress_bar.empty()
             status_text.empty()
+            
+            # ===== 📊 기본 분석 결과 표시 =====
+            st.write("---")
+            st.subheader("📊 기본 분석 결과")
+            
+            # result_text 생성
+            result_parts = []
+            result_parts.append(f"**성별**: {gender}")
+            if age_range:
+                result_parts.append(f"**추정 나이**: {age_range}")
+            
+            if current_jobs:
+                job_list = ", ".join(current_jobs)
+                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%): {job_list}")
+            
+            if suitable_jobs:
+                job_list = ", ".join(suitable_jobs)
+                result_parts.append(f"**어울리는 직업** (100% 관상): {job_list}")
+            
+            result_text = "\n\n".join(result_parts)
+            st.info(result_text)
+            
+            st.markdown("💫 *추정이 맞으면 좋겠구려!*")
+            st.write("---")
+            # ===== 기본 분석 결과 표시 끝 =====
+
 
 # --- 12. 하단 안내 및 푸터 ---
 st.markdown("---")
