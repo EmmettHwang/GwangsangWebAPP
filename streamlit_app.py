@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.1.2 (2024-12-17)
+# Version: v2.1.3 (2024-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -8,6 +8,7 @@
 #   - f-string 문법 오류 수정
 #   - 별점 줄바꿈 추가
 #   - split() 문법 오류 긴급 수정
+#   - 콘솔 디버그 출력 추가
 # ================================================================
 
 import streamlit as st
@@ -441,6 +442,7 @@ def get_all_available_models():
 def analyze_face_info(model_name, image):
     """얼굴에서 성별, 나이대, 직업 분석 (관상학 + 의상 분석)"""
     try:
+        print(f"\n[DEBUG] analyze_face_info 호출됨 - 모델: {model_name}")
         model = genai.GenerativeModel(model_name)
         analysis_prompt = """
 이 사진을 보고 다음 정보를 분석해주세요:
@@ -477,6 +479,8 @@ def analyze_face_info(model_name, image):
 어울리는 직업: 교육, 컨설팅, 미디어
 """
         response = model.generate_content([analysis_prompt, image])
+        print(f"[DEBUG] AI 응답 받음 - 길이: {len(response.text)} 문자")
+        print(f"[DEBUG] AI 응답 미리보기: {response.text[:200]}...")
         return response.text, None
     except Exception as e:
         return None, str(e)
@@ -562,6 +566,10 @@ if st.session_state.final_image:
                     face_info, error = analyze_face_info(available_models[0], image)
                     if face_info:
                         # ===== 디버그: AI 응답 전체 출력 =====
+                        print("=" * 80)
+                        print("🔍 AI 원본 응답 (콘솔):")
+                        print(face_info)
+                        print("=" * 80)
                         st.info(f"🔍 AI 원본 응답:\n{face_info}")
                         
                         # 성별 추출 - 개선된 방식
@@ -617,12 +625,25 @@ if st.session_state.final_image:
                                     break
                         
                         # 디버그 출력
+                        print("=" * 80)
+                        print("✅ 파싱 결과 (콘솔):")
+                        print(f"성별: {gender}")
+                        print(f"나이: {age_range}")
+                        print(f"현재직업: {current_jobs}")
+                        print(f"어울리는직업: {suitable_jobs}")
+                        print("=" * 80)
                         st.success(f"✅ 파싱 결과:\n성별={gender}\n나이={age_range}\n현재직업={current_jobs}\n어울리는직업={suitable_jobs}")
                         
                 except Exception as e:
+                    print(f"[ERROR] 파싱 에러: {e}")
+                    import traceback
+                    traceback.print_exc()
                     st.error(f"⚠️ 파싱 에러: {e}")
                     pass
                 except Exception as e:
+                    print(f"[ERROR] 파싱 에러: {e}")
+                    import traceback
+                    traceback.print_exc()
                     st.error(f"⚠️ 파싱 에러: {e}")
                     pass
             
