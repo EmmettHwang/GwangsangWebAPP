@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.5.2 (2024-12-17)
+# Version: v2.5.2 (2025-12-17)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -1192,7 +1192,7 @@ st.markdown("""
     <p>🔒 <b>개인정보 보호:</b> 모든 사진은 분석 후 즉시 삭제됩니다.</p>
     <p>🎲 <b>엔터테인먼트 목적:</b> 본 서비스는 재미를 위한 것으로, 실제 운세와 무관합니다.</p>
     <p style="margin-top: 20px; color: #999; font-size: 12px;">
-        🧙‍♂️ 관상가 아솔 © 2024 | Powered by Google Gemini AI
+        🧙‍♂️ 관상가 아솔 © 2025 | Powered by Google Gemini AI
     </p>
 </div>
 """, unsafe_allow_html=True)
