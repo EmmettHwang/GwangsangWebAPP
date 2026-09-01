@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.5.2 (2025-12-17)
+# Version: v2.6.0 (2026-09-01)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,16 +16,37 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.6.0] AI 백엔드를 사내 LLM 서버(OpenAI 호환)로 완전 교체
+#   - [v2.6.0] Gemini / Hugging Face 경로 제거
+#   - [v2.6.0] 윈도우 cp949 콘솔에서 이모지 print 로 앱이 죽던 버그 수정
 # ================================================================
+
+import sys
+import io  # 이미지 변환용
+
+# 윈도우 콘솔(cp949)에서는 print 의 이모지가 UnicodeEncodeError 를 내며
+# 앱 전체를 죽인다. except 블록 안에서 터지면 진짜 원인까지 가려지므로
+# 다른 무엇보다 먼저 표준출력을 UTF-8 로 고정한다.
+if not getattr(sys, "_asol_utf8_done", False):
+    for _name in ("stdout", "stderr"):
+        _stream = getattr(sys, _name, None)
+        try:
+            if hasattr(_stream, "reconfigure"):
+                _stream.reconfigure(encoding="utf-8", errors="replace")
+            elif hasattr(_stream, "buffer"):
+                setattr(sys, _name, io.TextIOWrapper(
+                    _stream.buffer, encoding="utf-8", errors="replace", line_buffering=True))
+        except Exception:
+            pass  # 표준출력을 못 바꿔도 앱은 계속 떠야 한다
+    sys._asol_utf8_done = True
 
 import streamlit as st
 from PIL import Image
-import google.generativeai as genai
 import time
 import base64
 import json
-import requests  # Hugging Face API용
-import io  # 이미지 변환용
+import requests
+import llm_client  # 사내 LLM 서버(OpenAI 호환) 클라이언트
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
@@ -431,30 +452,25 @@ st.markdown("""
 
 # --- 7. API 키 설정 ---
 try:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    print("✅ API 키 설정 성공!", flush=True)
+    llm_client.configure(
+        base_url=st.secrets["LLM_BASE_URL"],
+        api_key=st.secrets["LLM_API_KEY"],
+    )
+    print("[OK] LLM 서버 설정 성공!", flush=True)
 except Exception as e:
-    print(f"❌ API 키 설정 실패: {e}", flush=True)
-    st.error("🚨 API 키 설정을 확인하시오. `.streamlit/secrets.toml` 파일에 GOOGLE_API_KEY를 추가해야 합니다.")
+    print(f"[실패] LLM 서버 설정 실패: {e}", flush=True)
+    st.error("🚨 LLM 설정을 확인하시오. `.streamlit/secrets.toml` 에 LLM_BASE_URL 과 LLM_API_KEY 가 필요합니다.")
     st.stop()
 
 # --- 8. 장군신(AI 모델) 함수들 ---
 def get_all_available_models():
-    """사용 가능한 모든 Gemini 모델 목록 가져오기"""
-    try:
-        all_models = []
-        for model_info in genai.list_models():
-            if 'generateContent' in model_info.supported_generation_methods:
-                all_models.append(model_info.name)
-        return all_models
-    except:
-        return ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-2.0-flash-exp']
+    """사내 LLM 서버에서 쓸 수 있는 비전 모델 목록 (우선순위 순)"""
+    return llm_client.list_vision_models()
 
 def analyze_face_info(model_name, image):
     """얼굴에서 성별, 나이대, 직업 분석 (관상학 + 의상 분석)"""
     try:
         print(f"\n[DEBUG] analyze_face_info 호출됨 - 모델: {model_name}", flush=True)
-        model = genai.GenerativeModel(model_name)
         analysis_prompt = """
 이 사진을 보고 다음 정보를 분석해주세요:
 
@@ -489,87 +505,18 @@ def analyze_face_info(model_name, image):
 현재 직업: 마케팅, 디자인, 기획
 어울리는 직업: 교육, 컨설팅, 미디어
 """
-        response = model.generate_content([analysis_prompt, image])
+        response, error = llm_client.generate_with_image(model_name, analysis_prompt, image)
+        if response is None:
+            return None, error
         print(f"[DEBUG] AI 응답 받음 - 길이: {len(response.text)} 문자", flush=True)
         print(f"[DEBUG] AI 응답 미리보기: {response.text[:200]}...", flush=True)
         return response.text, None
     except Exception as e:
         return None, str(e)
 
-def analyze_face_info_huggingface(image):
-    """Hugging Face API로 얼굴 분석 (Gemini 실패 시 사용)"""
-    try:
-        print("[DEBUG] Hugging Face 모델 시도 중...", flush=True)
-        
-        # Hugging Face API 토큰 확인
-        if "HUGGINGFACE_API_KEY" not in st.secrets:
-            print("⚠️ HUGGINGFACE_API_KEY가 설정되지 않음", flush=True)
-            return None, "HUGGINGFACE_API_KEY not set"
-        
-        hf_token = st.secrets["HUGGINGFACE_API_KEY"]
-        
-        # 이미지를 bytes로 변환
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        # Hugging Face Vision-Language 모델 사용
-        # Qwen2-VL-7B-Instruct (비전-언어 모델, 무료)
-        API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct"
-        headers = {"Authorization": f"Bearer {hf_token}"}
-        
-        # 이미지 캡션 생성
-        print("[DEBUG] Hugging Face API 호출 중...", flush=True)
-        response = requests.post(API_URL, headers=headers, data=img_byte_arr, timeout=30)
-        
-        if response.status_code != 200:
-            print(f"❌ Hugging Face API 오류: {response.status_code}", flush=True)
-            return None, f"API error: {response.status_code}"
-        
-        result = response.json()
-        caption = result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "")
-        
-        print(f"[DEBUG] Hugging Face 응답: {caption}", flush=True)
-        
-        # Qwen2-VL 응답 처리
-        # 응답이 비어있으면 기본 분석 제공
-        if not caption or len(caption) < 10:
-            analysis = """성별: 사람
-나이대: 성인
-현재 직업(추정): 일반 직장인, 전문직
-어울리는 직업: 서비스업, 사무직"""
-        else:
-            analysis = f"""성별: 사람
-나이대: 성인
-현재 직업(추정): 일반 직장인, 전문직
-어울리는 직업: 서비스업, 사무직
-
-참고: {caption[:200]}"""
-        
-        print("✅ Hugging Face 분석 완료!", flush=True)
-        return analysis, None
-        
-    except requests.Timeout:
-        print("❌ Hugging Face API 타임아웃", flush=True)
-        return None, "Timeout"
-    except Exception as e:
-        print(f"❌ Hugging Face 오류: {e}", flush=True)
-        return None, str(e)
-
 def try_model_with_image(model_name, prompt, image):
     """특정 모델로 이미지 분석 시도"""
-    try:
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content([prompt, image])
-        return response, None
-    except Exception as e:
-        error_msg = str(e)
-        if "429" in error_msg or "quota" in error_msg.lower():
-            return None, "quota_exceeded"
-        elif "404" in error_msg:
-            return None, "model_not_found"
-        else:
-            return None, error_msg
+    return llm_client.generate_with_image(model_name, prompt, image)
 
 # --- 9. 세션 초기화 ---
 if 'final_image' not in st.session_state:
@@ -586,7 +533,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.5.2)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.6.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -665,23 +612,8 @@ if st.session_state.final_image:
                             print(f"🔄 다음 모델 시도 중...", flush=True)
                 
                 if not face_info:
-                    print(f"❌ Gemini {max_attempts}개 모델 모두 실패!", flush=True)
-                    print("🔄 Hugging Face 무료 모델로 시도 중...", flush=True)
-                    
-                    # Hugging Face fallback
-                    try:
-                        face_info, hf_error = analyze_face_info_huggingface(image)
-                        if face_info:
-                            print("✅ Hugging Face 성공!", flush=True)
-                            st.success("✅ Hugging Face 무료 모델로 분석 완료!")
-                        else:
-                            print(f"❌ Hugging Face도 실패: {hf_error}", flush=True)
-                            print("⚠️ [로그] 모든 AI 모델 실패 - Gemini(429), HF(410)", flush=True)
-                            # 사용자 화면에는 표시하지 않음
-                    except Exception as e:
-                        print(f"❌ Hugging Face 예외: {e}", flush=True)
-                        print(f"⚠️ [로그] {max_attempts}개 모델 모두 실패", flush=True)
-                        # 사용자 화면에는 표시하지 않음
+                    # 비전 모델을 전부 시도했는데 실패. 화면에는 알리지 않고 로그만 남긴다.
+                    print(f"[실패] 비전 모델 {max_attempts}개 모두 실패!", flush=True)
                 
                 try:
                     if face_info:
@@ -971,7 +903,7 @@ if st.session_state.final_image:
             successful_model = None
             
             for model_name in available_models:
-                display_name = model_name.replace('models/', '').replace('gemini-', '').upper()
+                display_name = model_name.split(':')[0].upper()
                 status_text.markdown(f"<p class='status-text'>⚡ <strong>{display_name}</strong> 장군신 소환 중...</p>", unsafe_allow_html=True)
                 progress_bar.progress(85)
                 
@@ -1192,7 +1124,7 @@ st.markdown("""
     <p>🔒 <b>개인정보 보호:</b> 모든 사진은 분석 후 즉시 삭제됩니다.</p>
     <p>🎲 <b>엔터테인먼트 목적:</b> 본 서비스는 재미를 위한 것으로, 실제 운세와 무관합니다.</p>
     <p style="margin-top: 20px; color: #999; font-size: 12px;">
-        🧙‍♂️ 관상가 아솔 © 2025 | Powered by Google Gemini AI
+        🧙‍♂️ 관상가 아솔 © 2025 | Powered by 사내 LLM 서버
     </p>
 </div>
 """, unsafe_allow_html=True)

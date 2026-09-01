@@ -1,31 +1,100 @@
-# 1. 깃 초기화 (이미 했다면 생략 가능하지만 해도 상관없음)
-git init
-git config --global user.email "you@example.com"
-git config --global user.name "Your Name"
-git branch -M main
+# 관상가 아솔 (GwangsangWebAPP)
 
-# 2. 방금 만든 GitHub 주소 연결하기 (주소 부분에 복사한 걸 붙여넣으세요!)
-git remote add origin https://github.com/본인아이디/저장소이름.git
+**v2.6.0** (2026-09-01) · Streamlit 웹앱
 
-# 3. 현재 코드들을 장바구니에 담기
-git add .
+사진 한 장으로 관상을 풀이해 주는 웹앱. 조선 팔도를 떠돌던 전설의 관상가
+'아솔'이 얼굴을 보고 성별·나이대·직업을 짚어 준 뒤 관상 풀이를 들려준다.
 
-# 4. 포장하기 (이름표 붙이기)
-git commit -m "첫 번째 업로드"
+- 배포: https://gwangsangapp.streamlit.app
+- AI 백엔드: **사내 LLM 서버** (OpenAI 호환 API, 비전 모델 `gemma3:27b`)
 
-# 5. 가지 이름 정리 (오류 방지용)
-git branch -M main
+## 실행
 
-# 6. GitHub로 발사!
-git push -u origin main 
-## 여기서 잠깐 -u 옵션과 -f 옵션의 차이 
-### 만약 readme.md와 같은 파일이 있고 없을때 애러 날수 있음 
-###  ! [rejected]        main -> main (fetch first)
-### error: failed to push some refs to 'https://github.com/EmmettHwang/GwangsangWebAPP.git'
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
 
-## 이때에 -f 옵션을 사용함. 
+`.streamlit/secrets.toml` 에 아래 두 값이 있어야 한다. (이 파일은 `.gitignore` 로 제외됨)
 
-### git init에서 한글 문제로 애러 날때 사용
-> chcp 65001   
-> git init   
-> git config --global core.quotepath false   
+```toml
+LLM_BASE_URL = "https://llm.ssirn.co.kr/v1"
+LLM_API_KEY  = "..."
+```
+
+## 구성
+
+| 파일 | 역할 |
+|---|---|
+| `streamlit_app.py` | 앱 본체 (UI · 관상 프롬프트 · 결과 파싱) |
+| `llm_client.py` | 사내 LLM 서버 클라이언트 (OpenAI 호환) |
+| `.streamlit/config.toml` | 테마 · 서버 설정 |
+| `public/og-image.png` | 공유 미리보기 이미지 |
+
+## 변경 이력
+
+### v2.6.0 (2026-09-01) — AI 백엔드를 사내 LLM 서버로 완전 교체
+
+**무엇이 문제였나**
+
+1. Google Gemini API 의존. 무료 할당량(429)을 자주 넘겨 "모든 장군신이
+   휴식 중"으로 떨어지고, Hugging Face 대체 경로도 410 으로 죽어 있었다.
+2. 윈도우에서 로컬 실행하면 앱이 화면을 그리다 말고 죽었다.
+
+**왜 그랬나**
+
+2번이 특히 고약했다. 콘솔 인코딩이 cp949 인데 `print("❌ ...")` 의 이모지가
+cp949 로 인코딩되지 않아 `UnicodeEncodeError` 가 났다. 하필 그 print 가
+`except` 블록 안에 있어서, **원래 에러를 보고하려던 코드가 스스로 터지며
+진짜 원인까지 가려 버렸다.** 겉으로는 "요소 5개만 그리고 멈춤"으로 보인다.
+
+**어떻게 고쳤나**
+
+- `llm_client.py` 신규. OpenAI 호환 `/v1/chat/completions` 래퍼이며, 응답
+  객체가 `.text` 를 그대로 갖도록 맞춰 기존 UI 코드 1,000여 줄은 손대지 않았다.
+- Gemini · Hugging Face 경로 전부 제거 (`genai` 잔재 0건 확인).
+- 파일 최상단에서 stdout/stderr 을 UTF-8 로 고정. 다른 import 보다 먼저 수행한다.
+- 비전 모델만 사용. 관상은 사진을 봐야 하므로 텍스트 전용 모델은 쓸 수 없다.
+
+**모델 선정 근거 (실측)**
+
+서버의 7개 모델 중 이미지를 볼 수 있는 것은 2개뿐이었다.
+
+| 모델 | 결과 |
+|---|---|
+| `gemma3:27b` | 24초에 정상 응답, 요구 형식 4개 항목 모두 정확 → **채택** |
+| `qwen3-vl:32b` | 126초를 끌다가 HTTP 524 → 제외 |
+
+524 는 서버 앞단 Cloudflare 가 원본 응답을 기다리다 끊은 것이다. `qwen3-vl` 은
+thinking 모드로 사고과정(`reasoning`)을 길게 뱉느라 느리다. 되살리려면 thinking
+을 끄는 옵션을 먼저 확인해야 한다.
+
+이 제약 때문에 함께 손본 것:
+
+- 읽기 타임아웃 300초 → **90초**. Cloudflare 가 약 100초에 끊으므로 그 전에
+  포기해야 다음 모델로 넘어간다. (기존 300초 설정이 "얼굴 기본 정보 분석 중"
+  에서 하염없이 멈춰 있던 직접 원인이었다.)
+- 스트리밍 수신으로 전환. 첫 조각이 곧바로 흘러나오므로 524 를 피할 수 있다.
+  스트리밍 결과가 비면 일반 방식으로 자동 재시도한다.
+
+**어떻게 검증했나**
+
+- 웹소켓으로 실제 세션을 붙여 스크립트를 실행 → `FINISHED_SUCCESSFULLY`,
+  요소 12개 렌더, 예외 0건.
+- `PYTHONIOENCODING` 없이 실행해도 이모지 로그가 정상 출력됨을 확인
+  (cp949 크래시 재발 없음).
+- 앱 소스에서 실제 관상 프롬프트를 그대로 추출해 서버에 태운 결과,
+  `성별 / 나이대 / 현재 직업 / 어울리는 직업` 4개 항목이 형식대로 반환됨.
+
+**남은 것**
+
+- 실사용 사진으로 긴 본문(1200자 이상) 생성까지의 최종 확인.
+- `qwen3-vl:32b` thinking 비활성화 검토.
+
+### v2.5.2 이전
+
+`streamlit_app.py` 헤더 주석의 변경 목록 참조.
+
+## 개발 메모
+
+깃 사용법 등은 [개발가이드.md](개발가이드.md) 참조.
