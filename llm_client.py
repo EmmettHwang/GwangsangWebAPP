@@ -134,11 +134,16 @@ def _classify(status, text):
     return "HTTP %d: %s" % (status, (text or "")[:200])
 
 
-def generate_with_image(model_name, prompt, image, temperature=0.8, max_tokens=4096):
+def generate_with_image(model_name, prompt, image, temperature=0.8, max_tokens=4096,
+                        on_progress=None):
     """이미지 + 프롬프트로 생성. (LLMResponse, None) 또는 (None, 오류문자열)
 
     스트리밍으로 받는다. 첫 조각이 곧바로 흘러나오므로 앞단 Cloudflare 가
     응답을 기다리다 524 로 끊는 일을 피할 수 있다.
+
+    on_progress(text_so_far, chars, elapsed) 를 주면 조각이 올 때마다 불러 준다.
+    긴 본문은 30~70초가 걸려서, 아무 표시가 없으면 화면이 멈춘 줄 안다.
+    화면 갱신이 잦으면 오히려 느려지므로 0.35초에 한 번으로 제한한다.
     """
     try:
         data_uri = image_to_data_uri(image)
@@ -164,6 +169,7 @@ def generate_with_image(model_name, prompt, image, temperature=0.8, max_tokens=4
             return None, _classify(r.status_code, r.text)
 
         chunks = []
+        last_cb = 0.0
         for raw in r.iter_lines():
             if time.time() - started > STREAM_TOTAL_TIMEOUT:
                 r.close()
@@ -186,8 +192,21 @@ def generate_with_image(model_name, prompt, image, temperature=0.8, max_tokens=4
             piece = delta.get("content")
             if piece:
                 chunks.append(piece)
+                now = time.time()
+                if on_progress and now - last_cb >= 0.35:
+                    last_cb = now
+                    try:
+                        on_progress("".join(chunks), sum(len(c) for c in chunks),
+                                    now - started)
+                    except Exception:
+                        pass          # 화면 갱신 실패로 생성이 끊기면 안 된다
 
         text = "".join(chunks).strip()
+        if on_progress and text:
+            try:
+                on_progress(text, len(text), time.time() - started)
+            except Exception:
+                pass
 
         if not text:
             # 서버가 스트리밍(SSE)을 지원하지 않으면 조각이 하나도 안 모인다.

@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.6.0 (2026-09-01)
+# Version: v2.7.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,8 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.7.0] 감정서를 쓰는 동안 글자수·경과시간과 쓰고 있는 대목을 실시간 표시
+#              (GPU 는 도는데 화면이 멈춘 것처럼 보이던 문제)
 #   - [v2.6.0] AI 백엔드를 사내 LLM 서버(OpenAI 호환)로 완전 교체
 #   - [v2.6.0] Gemini / Hugging Face 경로 제거
 #   - [v2.6.0] 윈도우 cp949 콘솔에서 이모지 print 로 앱이 죽던 버그 수정
@@ -514,9 +516,10 @@ def analyze_face_info(model_name, image):
     except Exception as e:
         return None, str(e)
 
-def try_model_with_image(model_name, prompt, image):
-    """특정 모델로 이미지 분석 시도"""
-    return llm_client.generate_with_image(model_name, prompt, image)
+def try_model_with_image(model_name, prompt, image, on_progress=None):
+    """특정 모델로 이미지 분석 시도. on_progress 로 진행 상황을 받아 볼 수 있다."""
+    return llm_client.generate_with_image(model_name, prompt, image,
+                                          on_progress=on_progress)
 
 # --- 9. 세션 초기화 ---
 if 'final_image' not in st.session_state:
@@ -533,7 +536,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.6.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.7.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -902,12 +905,33 @@ if st.session_state.final_image:
             response = None
             successful_model = None
             
+            # 붓을 놀리는 동안 보여 줄 자리. 아무 표시가 없으면 멈춘 줄 안다.
+            live_box = st.empty()
+
             for model_name in available_models:
                 display_name = model_name.split(':')[0].upper()
                 status_text.markdown(f"<p class='status-text'>⚡ <strong>{display_name}</strong> 장군신 소환 중...</p>", unsafe_allow_html=True)
                 progress_bar.progress(85)
                 
-                response, error = try_model_with_image(model_name, prompt, image)
+                def _live(text_so_far, chars, elapsed, _dn=display_name):
+                    """조각이 올 때마다 — 글자수·경과시간과 지금 쓰는 대목을 보여 준다."""
+                    # 1200자를 목표로 85% ~ 99% 사이를 채운다
+                    progress_bar.progress(85 + min(14, int(14 * chars / 1200)))
+                    status_text.markdown(
+                        f"<p class='status-text'>🖌️ <strong>{_dn}</strong> 장군신이 "
+                        f"감정서를 쓰는 중… <strong>{chars:,}자</strong> · {elapsed:.0f}초</p>",
+                        unsafe_allow_html=True)
+                    tail = text_so_far[-160:].replace("\n", " ")
+                    live_box.markdown(
+                        "<div style='color:#8a7a7a;font-size:13px;line-height:1.7;"
+                        "padding:10px 14px;background:#faf7f7;border-left:3px solid #7D5A5A;"
+                        "border-radius:6px;min-height:52px'>…"
+                        f"{tail}<span style='opacity:.5'>▌</span></div>",
+                        unsafe_allow_html=True)
+
+                response, error = try_model_with_image(model_name, prompt, image,
+                                                       on_progress=_live)
+                live_box.empty()
                 
                 if response is not None:
                     successful_model = display_name
