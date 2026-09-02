@@ -18,6 +18,7 @@
 import os
 import re
 import html
+import io
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -59,6 +60,59 @@ def status() -> str:
     return f"{c['host']}:{c['port']} ({c['mode']}) 로 보냅니다."
 
 
+def oval_png(img, w=240, h=320, bg=(255, 255, 255)):
+    """얼굴 사진을 세로로 긴 타원으로 잘라 PNG 바이트로 돌려준다.
+
+    메일에서는 CSS ``border-radius`` 를 믿을 수 없다(Outlook 이 무시한다).
+    그래서 **이미지 자체를 타원으로** 만들어 둔다. 투명 PNG 도 배경색이
+    제각각인 클라이언트에서 지저분해지므로, 흰 바탕에 올려 불투명하게 굽는다.
+
+    가장자리는 4배로 그린 마스크를 줄여 부드럽게 만든다(안티에일리어싱).
+    """
+    from PIL import Image, ImageDraw
+
+    im = img.convert("RGB")
+    # 얼굴은 가운데 위쪽에 있으므로, 세로로 자를 때 위를 조금 더 남긴다.
+    tw, th = w, h
+    sw, sh = im.size
+    scale = max(tw / sw, th / sh)
+    im = im.resize((max(1, int(sw * scale)), max(1, int(sh * scale))),
+                   Image.LANCZOS)
+    sw, sh = im.size
+    left = (sw - tw) // 2
+    top = int((sh - th) * 0.38)          # 정가운데(0.5)보다 위
+    im = im.crop((left, top, left + tw, top + th))
+
+    S = 4
+    mask = Image.new("L", (tw * S, th * S), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, tw * S - 1, th * S - 1), fill=255)
+    mask = mask.resize((tw, th), Image.LANCZOS)
+
+    out = Image.new("RGB", (tw, th), bg)
+    out.paste(im, (0, 0), mask)
+
+    buf = io.BytesIO()
+    out.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _info_html(info):
+    """기본 분석 결과를 메일용 표로. info 는 (이름, 값) 목록이다."""
+    if not info:
+        return ""
+    rows = "".join(
+        "<tr>"
+        "<td style='padding:5px 14px 5px 0;color:#8a7a7a;font-size:13px;"
+        "white-space:nowrap;vertical-align:top'>%s</td>"
+        "<td style='padding:5px 0;font-size:14px;color:#3a2f2f'>%s</td>"
+        "</tr>" % (html.escape(str(k)), html.escape(str(v)))
+        for k, v in info if v)
+    if not rows:
+        return ""
+    return ("<table style='border-collapse:collapse;margin:0 auto 4px'>"
+            + rows + "</table>")
+
+
 def _to_html(md: str) -> str:
     """감정서 마크다운을 메일용 HTML 로. 완전한 변환기가 아니라
     이 앱이 실제로 쓰는 문법(**굵게** · 목록 · 줄바꿈)만 다룬다."""
@@ -77,8 +131,20 @@ def _to_html(md: str) -> str:
     return "\n".join(out)
 
 
-def render(body_md: str, title: str, subtitle: str = "") -> str:
-    """메일 본문 HTML. 메일 클라이언트는 외부 CSS 를 무시하므로 전부 인라인으로 쓴다."""
+def render(body_md: str, title: str, subtitle: str = "",
+           photo_cid: str = "", info=None) -> str:
+    """메일 본문 HTML. 메일 클라이언트는 외부 CSS 를 무시하므로 전부 인라인으로 쓴다.
+
+    photo_cid 를 주면 그 자리에 얼굴 사진을 넣는다. 이미지는 CID 로 붙인
+    첨부라야 한다 — Gmail 은 ``src="data:..."`` 를 지운다.
+    """
+    photo_block = ("<div style='text-align:center;margin:0 0 14px'>"
+                   "<img src='cid:%s' width='240' height='320' alt='' "
+                   "style='display:inline-block;border:0;outline:none;"
+                   "text-decoration:none'></div>" % photo_cid) if photo_cid else ""
+    info_block = ("<div style='text-align:center;margin:0 0 20px;padding:14px 10px;"
+                  "background:#faf7f7;border-radius:10px'>" + _info_html(info) + "</div>"
+                  ) if _info_html(info) else ""
     return f"""<div style="margin:0;padding:24px 12px;background:#f6f2ee">
   <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:14px;
               overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);
@@ -90,6 +156,8 @@ def render(body_md: str, title: str, subtitle: str = "") -> str:
       {f'<div style="opacity:.85;font-size:13px;margin-top:6px">{html.escape(subtitle)}</div>' if subtitle else ''}
     </div>
     <div style="padding:26px 28px">
+      {photo_block}
+      {info_block}
       {_to_html(body_md)}
     </div>
     <div style="padding:16px 28px 24px;border-top:1px solid #eee;
@@ -102,7 +170,8 @@ def render(body_md: str, title: str, subtitle: str = "") -> str:
 
 
 def send(to: str, subject: str, body_md: str,
-         title: str = "관상가 아솔의 감정서", subtitle: str = ""):
+         title: str = "관상가 아솔의 감정서", subtitle: str = "",
+         photo=None, info=None):
     """감정서를 보낸다. 돌려주는 값은 (성공여부, 사람이 읽을 설명).
 
     실패를 삼키지 않는다 — 왜 못 보냈는지 그대로 돌려준다."""
@@ -120,8 +189,25 @@ def send(to: str, subject: str, body_md: str,
     # Message-ID 의 도메인은 보내는 주소를 따라간다(없으면 기본값).
     dom = (parseaddr(c["from"])[1].split("@")[-1] or "ssirn.co.kr")
     msg["Message-ID"] = make_msgid(domain=dom)
-    msg.set_content(re.sub(r"\*\*|__", "", body_md))          # 평문 대안
-    msg.add_alternative(render(body_md, title, subtitle), subtype="html")
+    # 사진은 미리 구워 둔다. 실패해도 감정서는 나가야 하므로 없는 셈 친다.
+    png, cid = None, ""
+    if photo is not None:
+        try:
+            png = oval_png(photo)
+            cid = "face"
+        except Exception:
+            png, cid = None, ""
+
+    plain = re.sub(r"\*\*|__", "", body_md)
+    if info:
+        plain = ("\n".join("%s: %s" % (k, v) for k, v in info if v)
+                 + "\n\n" + plain)
+    msg.set_content(plain)                                   # 평문 대안
+    msg.add_alternative(render(body_md, title, subtitle, cid, info), subtype="html")
+
+    if png:
+        # HTML 부분 안에 붙여야 multipart/related 가 되어 본문에 표시된다.
+        msg.get_payload()[1].add_related(png, "image", "png", cid="<%s>" % cid)
 
     try:
         if c["mode"] == "ssl":

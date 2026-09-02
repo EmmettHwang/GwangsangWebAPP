@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.9.0 (2026-09-02)
+# Version: v2.9.1 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,7 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.9.1] 감정서 메일에 얼굴 사진(세로 타원)과 기본 분석 결과를 함께 넣음
 #   - [v2.9.0] 메일로 받으려면 이름·이메일·전화번호를 동의받아 수집(SQLite)
 #   - [v2.9.0] 버튼을 [메일로 받기] / [화면으로만 보기] 둘로 분리
 #              (전에는 주소만 적혀 있으면 한 번에 발송돼서 갑작스러웠다)
@@ -537,7 +538,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.9.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.9.1)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -1066,11 +1067,23 @@ if st.session_state.get("last_result"):
                     st.session_state.last_model = _model
                     st.session_state.mail_note = None
                     if _send:
+                        # 화면에서 보여 준 기본 분석 결과를 메일에도 그대로 싣는다.
+                        _age = _b.get("age_range", "")
+                        if _age:
+                            _age += ("  (일러 주신 나이)" if _b.get("told_age")
+                                     else "  (아솔의 추정)")
+                        _info = [
+                            ("성별", _b.get("gender", "")),
+                            ("나이", _age),
+                            ("현재 직업 추정", ", ".join(_b.get("current_jobs") or [])),
+                            ("어울리는 직업", ", ".join(_b.get("suitable_jobs") or [])),
+                        ]
                         _ok, _note = mailer.send(
                             _mail, "📜 관상가 아솔의 감정서가 도착하였소",
                             _resp.text,
                             subtitle=f"{_b.get('gender', '')} · "
-                                     f"{_b.get('age_range', '')}".strip(" ·"))
+                                     f"{_b.get('age_range', '')}".strip(" ·"),
+                            photo=_img, info=_info)
                         st.session_state.mail_note = (_ok, _note)
                         # 발송 결과까지 함께 남긴다 — 나중에 "안 왔다"는 문의가
                         # 오면 이 줄이 있어야 무슨 일이 있었는지 알 수 있다.
