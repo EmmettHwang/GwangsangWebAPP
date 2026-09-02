@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.8.0 (2026-09-02)
+# Version: v2.9.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,9 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.9.0] 메일로 받으려면 이름·이메일·전화번호를 동의받아 수집(SQLite)
+#   - [v2.9.0] 버튼을 [메일로 받기] / [화면으로만 보기] 둘로 분리
+#              (전에는 주소만 적혀 있으면 한 번에 발송돼서 갑작스러웠다)
 #   - [v2.8.0] 나이를 직접 일러 줄 수 있게 (사진만으로는 60대를 40대로 보기도 한다)
 #   - [v2.8.0] 맛보기 600자 -> [자세히 보기] 로 전체 1200자, 메일로도 발송
 #   - [v2.8.0] 감정서를 버튼 블록 밖에서 그린다 (다시 그려도 사라지지 않게)
@@ -52,7 +55,8 @@ import base64
 import json
 import requests
 import llm_client
-import mailer  # 사내 LLM 서버(OpenAI 호환) 클라이언트
+import mailer
+import leads  # 사내 LLM 서버(OpenAI 호환) 클라이언트
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
@@ -533,7 +537,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.8.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.9.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -981,16 +985,40 @@ if st.session_state.get("last_result"):
         st.caption("여기까지는 맛보기였소. 전체 감정서는 두 배 넘게 길고, "
                    "메일 주소를 남기면 그리로도 보내 드리오.")
         with st.form("detail_form"):
-            _mail = st.text_input("메일 주소 (비워 두면 화면으로만 보오)",
-                                  placeholder="you@example.com")
-            _go = st.form_submit_button("📜 전체 감정서 보기", type="primary")
+            st.markdown(leads.NOTICE)
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _name = st.text_input("이름", placeholder="홍길동")
+                _mail = st.text_input("이메일", placeholder="you@example.com")
+            with _c2:
+                _phone = st.text_input("휴대전화", placeholder="010-1234-5678")
+            _agree = st.checkbox("위 내용에 동의하오. 감정서를 메일로 보내 주시오.")
+            _b1, _b2 = st.columns(2)
+            with _b1:
+                _send = st.form_submit_button("📬 메일로 받기", type="primary",
+                                              use_container_width=True)
+            with _b2:
+                _only = st.form_submit_button("👀 화면으로만 보기",
+                                              use_container_width=True)
 
-        if _go:
-            _mail = (_mail or "").strip()
-            if _mail and not mailer.valid(_mail):
-                st.error("메일 주소를 다시 확인해 주시오.")
-            elif not st.session_state.final_image:
-                st.error("사진이 사라졌소. 다시 올려 주시오.")
+        if _send or _only:
+            # 메일로 받을 때만 검사한다. 화면으로만 볼 때는 아무것도 받지 않는다.
+            _err = None
+            if _send:
+                if not _agree:
+                    _err = ("동의하셔야 메일로 보내 드릴 수 있소. "
+                            "동의 없이 보시려면 [화면으로만 보기]를 누르시오.")
+                elif not leads.valid_name(_name):
+                    _err = "이름을 두 글자 이상 적어 주시오."
+                elif not mailer.valid(_mail):
+                    _err = "메일 주소를 다시 확인해 주시오."
+                elif not leads.valid_phone(_phone):
+                    _err = "휴대전화번호를 다시 확인해 주시오. (예: 010-1234-5678)"
+            if not st.session_state.final_image:
+                _err = "사진이 사라졌소. 다시 올려 주시오."
+
+            if _err:
+                st.error(_err)
             else:
                 _pb = st.progress(0)
                 _sx = st.empty()
@@ -1037,16 +1065,23 @@ if st.session_state.get("last_result"):
                     st.session_state.full_result = _resp.text
                     st.session_state.last_model = _model
                     st.session_state.mail_note = None
-                    if _mail:
-                        # 남긴 주소는 먼저 기록해 둔다. 발송이 실패해도 남는다.
-                        mailer.record(_mail, {"age": _b.get("age_range"),
-                                              "gender": _b.get("gender"),
-                                              "model": _model})
-                        st.session_state.mail_note = mailer.send(
+                    if _send:
+                        _ok, _note = mailer.send(
                             _mail, "📜 관상가 아솔의 감정서가 도착하였소",
                             _resp.text,
                             subtitle=f"{_b.get('gender', '')} · "
                                      f"{_b.get('age_range', '')}".strip(" ·"))
+                        st.session_state.mail_note = (_ok, _note)
+                        # 발송 결과까지 함께 남긴다 — 나중에 "안 왔다"는 문의가
+                        # 오면 이 줄이 있어야 무슨 일이 있었는지 알 수 있다.
+                        _sv_ok, _sv_msg = leads.save(
+                            _name, _mail, _phone, _agree,
+                            {"gender": _b.get("gender"), "age": _b.get("age_range"),
+                             "model": _model, "mail_ok": _ok, "mail_msg": _note})
+                        if not _sv_ok:
+                            # 화면에는 안 띄운다(보는 사람이 할 수 있는 일이 없다).
+                            # 대신 서버 로그에 남겨 우리가 알아채게 한다.
+                            print("[leads] 저장 실패:", _sv_msg, flush=True)
                     st.rerun()
 
     # ===== 복사 버튼 =====
