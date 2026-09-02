@@ -56,13 +56,10 @@ def _fit_box(iw, ih, cx, cy, bw, bh):
             int(round(left + bw)), int(round(top + bh)))
 
 
-def face_crop(img, w, h):
-    """얼굴을 가운데 둔 w×h 이미지. 얼굴을 못 찾으면 가운데를 자른다."""
-    from PIL import Image
-
-    im = img.convert("RGB")
+def _crop_box(im, w, h, face):
+    """`face_crop` 이 쓸 자르기 상자. 상자를 따로 뺀 까닭은 `boxed_png` 가
+    **같은 상자**를 알아야 얼굴 네모를 제자리에 그릴 수 있기 때문이다."""
     iw, ih = im.size
-    face = find_face(im)
 
     if face is not None:
         fx, fy, fw, fh = face
@@ -78,7 +75,43 @@ def face_crop(img, w, h):
         bw, bh = w / scale, h / scale
         cx, cy = iw / 2.0, ih * 0.42
 
-    return im.crop(_fit_box(iw, ih, cx, cy, bw, bh)).resize((w, h), Image.LANCZOS)
+    return _fit_box(iw, ih, cx, cy, bw, bh)
+
+
+def face_crop(img, w, h):
+    """얼굴을 가운데 둔 w×h 이미지. 얼굴을 못 찾으면 가운데를 자른다."""
+    from PIL import Image
+
+    im = img.convert("RGB")
+    return im.crop(_crop_box(im, w, h, find_face(im))).resize((w, h), Image.LANCZOS)
+
+
+def boxed_png(img, w=240, h=320, color=(200, 60, 60), width=3):
+    """얼굴을 **어디로 보았는지** 네모로 표시한 PNG. 타원과 나란히 놓고 보여 준다.
+
+    타원은 결과만 보여 줄 뿐 왜 그렇게 잘렸는지는 말해 주지 않는다. Haar 가
+    찾아낸 자리를 그대로 그려 주면, 엉뚱한 데를 잡았을 때 사람이 바로 알아채고
+    다시 찍는다. 얼굴을 못 찾았으면 네모 없이 크롭만 돌려준다 —
+    못 찾았다는 말은 화면 쪽에서 한다.
+    """
+    from PIL import Image, ImageDraw
+
+    im = img.convert("RGB")
+    face = find_face(im)
+    box = _crop_box(im, w, h, face)          # face_crop 과 같은 상자여야 자리가 맞는다
+    out = im.crop(box).resize((w, h), Image.LANCZOS)
+
+    if face is not None:
+        fx, fy, fw, fh = face
+        sx = w / float(box[2] - box[0])      # 자른 뒤 늘린 만큼 좌표도 늘린다
+        sy = h / float(box[3] - box[1])
+        x0, y0 = (fx - box[0]) * sx, (fy - box[1]) * sy
+        ImageDraw.Draw(out).rectangle(
+            [x0, y0, x0 + fw * sx, y0 + fh * sy], outline=color, width=width)
+
+    buf = io.BytesIO()
+    out.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
 
 
 def oval_png(img, w=240, h=320, bg=(255, 255, 255)):

@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v3.2.0 (2026-09-02)
+# Version: v3.3.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,7 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v3.3.0] 카메라 버튼을 우리말로 · 미리보기 두 장(타원+얼굴자리) · [처음으로]
 #   - [v3.2.0] 촬영 뒤 감정서에 실제로 담길 타원 얼굴을 미리 보여 줌
 #   - [v3.1.0] 카메라가 안 열릴 때 짚어 볼 것을 화면에 넣음(가상 카메라·권한·점유 등)
 #   - [v3.0.0] 주소를 asoul.ssirn.co.kr 로 · opencv 4.x 고정(5.0 에 Haar 없음)
@@ -551,7 +552,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.2.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.3.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -567,6 +568,38 @@ if input_method == "📸 직접 촬영":
     if camera_image:
         print("📸 카메라로 사진 촬영됨!", flush=True)
         st.session_state.final_image = camera_image
+
+    # Streamlit 이 카메라 버튼 글자를 영어로 고정해 둔다("Take Photo"/"Clear photo").
+    # 찍고 나면 카메라가 꺼지면서 "Clear photo" 만 남는데, 이것이 "사진을 지운다"로
+    # 읽혀 다시 찍는 버튼인 줄 모른다. 두 상태가 같은 버튼이라 CSS 로는 가릴 수
+    # 없으므로, 위 2번 메타태그 주입과 같은 방식으로 글자를 갈아 끼운다.
+    st.components.v1.html("""
+<script>
+(function () {
+    var doc = window.parent.document;
+    var MAP = { "take photo": "📸 사진 찍기", "clear photo": "🔄 다시 찍기" };
+
+    function relabel() {
+        var w = doc.querySelector('[data-testid="stCameraInput"]');
+        if (!w) return;
+        w.querySelectorAll("button").forEach(function (b) {
+            // 글자는 버튼 안 <p> 에 있다. 버튼째 갈아치우면 글꼴이 흐트러진다.
+            var node = b.querySelector("p") || b;
+            var t = (node.textContent || "").trim().toLowerCase();
+            if (MAP[t]) node.textContent = MAP[t];
+        });
+    }
+
+    relabel();
+    // 찍기 전후로 버튼이 다시 그려지므로 계속 지켜본다.
+    // 바꾼 글자는 MAP 에 없으니 이 관찰이 스스로를 다시 부르지는 않는다.
+    if (!doc.__asolCamLabel) {
+        doc.__asolCamLabel = new MutationObserver(relabel);
+        doc.__asolCamLabel.observe(doc.body, { childList: true, subtree: true });
+    }
+})();
+</script>
+""", height=0)
 
     # 카메라는 브라우저·기기 사정으로 자주 막힌다. 일반 사용자는 원인을 짐작조차
     # 못 하고 "고장났다"고 여기므로, 흔한 경우를 순서대로 짚어 준다.
@@ -614,30 +647,45 @@ elif input_method == "📂 앨범 선택":
         print("📂 앨범에서 사진 선택됨!", flush=True)
         st.session_state.final_image = uploaded_file
 
-# --- 11. 관상 분석 로직 ---
-if st.session_state.final_image:
-    st.write("---")
+# 고른 사진은 **고른 그 자리에서** 보여 준다. 찍고 난 뒤 위젯이 빈 상자로 남고
+# 얼굴은 한참 아래에 뜨면, 제대로 찍힌 것인지 알 수 없어 답답하다.
+# 원본이 아니라 잘린 얼굴을 보여 주는 까닭은, 감정서·메일·보관이 모두
+# **같은 faceutil** 을 쓰기 때문이다 — 여기서 본 얼굴이 그대로 메일에 들어간다.
+@st.cache_data(show_spinner=False)
+def _preview(raw: bytes):
+    """미리보기 두 장을 한 번만 굽는다.
 
-    # 원본을 그대로 보여 주면 배경까지 다 나와 감정서와 딴판이 된다.
-    # 감정서·보관에 실제로 쓰이는 것과 **같은 faceutil** 로 잘라 보여 준다.
-    # 그래야 여기서 본 얼굴과 메일로 받는 얼굴이 늘 같다.
-    _p1, _p2, _p3 = st.columns([1, 1.1, 1])
+    위젯을 하나 건드릴 때마다 Streamlit 은 화면을 통째로 다시 그린다. 그때마다
+    얼굴을 다시 찾으면(한 장에 세 번) 눈에 띄게 굼떠진다. 사진이 같으면 결과도
+    같으므로 **사진 바이트를 열쇠로** 삼아 캐시한다.
+    """
+    im = Image.open(io.BytesIO(raw))
+    return (faceutil.oval_png(im), faceutil.boxed_png(im),
+            faceutil.find_face(im) is not None)
+
+
+if st.session_state.final_image:
     try:
-        _src = Image.open(st.session_state.final_image)   # PIL 이 알아서 처음으로 되감는다
-        _found = faceutil.find_face(_src) is not None
-        with _p2:
-            st.image(faceutil.oval_png(_src),
-                     caption="✅ 감정서에 담길 얼굴",
-                     use_container_width=True)
+        _oval, _boxed, _found = _preview(st.session_state.final_image.getvalue())
+        # 왼쪽은 결과, 오른쪽은 그 근거다. 나란히 두면 엉뚱한 데를 잡았을 때
+        # 사람이 바로 알아채고 다시 찍는다.
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            st.image(_oval, caption="✅ 감정서에 담길 얼굴", use_container_width=True)
+        with _c2:
+            st.image(_boxed, caption="🔍 아솔이 얼굴로 본 자리", use_container_width=True)
         if not _found:
             st.info("얼굴을 또렷이 찾지 못해 가운데를 잘랐소. "
                     "정면으로, 밝은 곳에서 다시 담으면 더 낫소.")
     except Exception as _e:
         # 미리보기가 어긋나도 감정은 계속되어야 한다. 원본으로 물러선다.
         print(f"[preview] 얼굴 미리보기 실패: {_e}", flush=True)
-        with _p2:
-            st.image(st.session_state.final_image, caption="✅ 선택된 얼굴",
-                     use_container_width=True)
+        st.image(st.session_state.final_image, caption="✅ 선택된 얼굴",
+                 use_container_width=True)
+
+# --- 11. 관상 분석 로직 ---
+if st.session_state.final_image:
+    st.write("---")
 
     # 사진만으로는 나이를 자주 틀린다 — 60대를 40대로 보기도 한다.
     # 알려 주면 그 값으로 감정하고, 비워 두면 아솔이 스스로 추정한다.
@@ -1283,6 +1331,25 @@ if st.session_state.get("last_result"):
         }}
     </script>
     """, height=120)
+
+
+# --- 11-c. 처음으로 (초기화) ---
+# 감정서를 다 보고 나면 새로 보는 길이 새로고침밖에 없었다. 그마저도 사진과
+# 나이 선택이 남아 있어 "지워진 것인지" 알 수 없었다. 한 번에 처음으로 되돌린다.
+if st.session_state.get("last_result"):
+    st.write("")
+    _r1, _r2, _r3 = st.columns([1, 1.2, 1])
+    with _r2:
+        if st.button("↩️ 처음으로", use_container_width=True,
+                     help="감정서를 지우고 다시 촬영하는 자리로 돌아가오."):
+            # 위젯 키(ui_*)까지 지워야 나이·성별 고른 것이 남지 않는다.
+            # 지운 뒤 9번 절이 다시 초기값을 넣어 주므로 빠뜨려도 터지지는 않는다.
+            for _k in ("final_image", "last_result", "last_model", "full_result",
+                       "basic", "mail_note", "told_age", "told_gender",
+                       "ui_dec", "ui_part", "ui_gender"):
+                st.session_state.pop(_k, None)
+            print("↩️ 처음으로 — 상태를 모두 비웠다", flush=True)
+            st.rerun()
 
 
 # --- 12. 하단 안내 및 푸터 ---
