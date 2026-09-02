@@ -335,6 +335,35 @@ def try_model_with_image(model_name, prompt, image, on_progress=None):
 # --- 8-b. 감정서 프롬프트 ---
 # 맛보기(600자)와 전체(1200자 이상)가 같은 양식을 쓰되 분량 지시만 다르다.
 # 양식까지 따로 두면 두 감정서가 따로 놀아 이어 읽기 어색해진다.
+SHORT_FORM = """당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
+이 사진의 인물을 보고 관상을 긍정적이고 재미있게 봐주세요.
+말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려")을 사용하세요.{gender_age_info}
+
+[중요] 이것은 **맛보기 감정서**요. 아래 다섯 항목만, **전체 600자 안팎**으로 쓰시오.
+항목을 더 만들지 말고, 각 항목은 2~3문장을 넘기지 마시오.
+
+🎭 **첫인상과 기운**
+- 얼굴 전체의 균형과 타고난 복을 2~3문장으로.
+
+💰 **재물운**
+- 코와 광대로 보는 재물 축적 능력을 2~3문장으로.
+
+💕 **애정운**
+- 눈과 입으로 보는 인연과 가정운을 2문장으로.
+
+🎯 **운세 점수**
+- 재물운 ⭐ / 애정운 ⭐ / 건강운 ⭐ / 직업운 ⭐ (별 개수로만, 설명 없이)
+
+📜 **아솔의 한마디**
+- 용기와 희망을 주는 따뜻한 말 2문장.
+
+**지침**
+- **굵게** 강조와 이모티콘을 적당히 쓰시오(과하지 않게).
+- 단점은 보완 가능한 점으로 부드럽게 표현하시오.
+- 분량을 넘기지 마시오. 짧고 인상적인 것이 이 맛보기의 목적이오.
+"""
+
+
 SHORT_RULE = """전체 분량: **600자 내외**. 이것은 맛보기 감정서요. 절대 800자를 넘기지 마시오."""
 FULL_RULE = """전체 분량: **최소 1200자 이상**. 각 항목을 앞서보다 훨씬 깊고 구체적으로."""
 
@@ -353,11 +382,15 @@ FULL_HEAD = ""
 
 def build_prompt(gender_age_info, detailed=False):
     """감정서 프롬프트. detailed=True 면 전체판."""
+    if not detailed:
+        # 맛보기는 양식 자체가 짧다. 큰 양식에 "600자로 줄여라"라고만 하면
+        # 항목이 열다섯 개라 물리적으로 불가능해 1,600자가 나왔다.
+        return SHORT_FORM.format(gender_age_info=gender_age_info)
     return PROMPT_FORM.format(
         gender_age_info=gender_age_info,
-        head_rule=(FULL_HEAD if detailed else SHORT_HEAD),
-        detail_rule=(FULL_DETAIL if detailed else SHORT_DETAIL),
-        length_rule=(FULL_RULE if detailed else SHORT_RULE))
+        head_rule=FULL_HEAD,
+        detail_rule=FULL_DETAIL,
+        length_rule=FULL_RULE)
 
 
 PROMPT_FORM = """당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
