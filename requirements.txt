@@ -2,4 +2,4 @@ streamlit
 requests
 Pillow
 fpdf2>=2.7.4
-opencv-python-headless
+opencv-python-headless>=4.8,<5   # 5.x 에는 Haar 분류기(cv2.data)가 없다

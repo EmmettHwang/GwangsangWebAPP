@@ -1146,7 +1146,7 @@ if st.session_state.get("last_result"):
     
     <script>
         function copyResult() {{
-            var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwansang.ssirn.co.kr/";
+            var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://asoul.ssirn.co.kr/";
             
             var messageDiv = document.getElementById('copy-result-msg');
             var button = event.target;

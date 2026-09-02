@@ -5,7 +5,7 @@
 사진 한 장으로 관상을 풀이해 주는 웹앱. 조선 팔도를 떠돌던 전설의 관상가
 '아솔'이 얼굴을 보고 성별·나이대·직업을 짚어 준 뒤 관상 풀이를 들려준다.
 
-- 배포: https://gwansang.ssirn.co.kr (svr3, Cloudflare 터널)
+- 배포: https://asoul.ssirn.co.kr (svr3, Cloudflare 터널)
 - AI 백엔드: **사내 LLM 서버** (OpenAI 호환 API, 비전 모델 `gemma3:27b`)
 
 ## 감정서는 두 단계다 (v2.8.0)
@@ -60,8 +60,8 @@ SMTP_MODE=starttls        # starttls | ssl | plain
 ## 배포
 
 ```bash
-git archive HEAD | ssh svr3 'tar x -C /data/sites/gwansang.ssirn.co.kr/app'
-ssh svr3 'cd /data/sites/gwansang.ssirn.co.kr && docker compose up -d --build'
+git archive HEAD | ssh svr3 'tar x -C /data/sites/asoul.ssirn.co.kr/app'
+ssh svr3 'cd /data/sites/asoul.ssirn.co.kr && docker compose up -d --build'
 ```
 
 `.streamlit/config.toml` 에 **`browser.serverAddress` 를 절대 넣지 말 것.**
