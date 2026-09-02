@@ -373,7 +373,7 @@ function showBlockScreen(currentUrl, userAgent) {
                 
                 document.body.removeChild(textarea);
             }
-        </script>
+        <${''}/script>
     `;
 }
 </script>
