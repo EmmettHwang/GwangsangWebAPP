@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v3.1.0 (2026-09-02)
+# Version: v3.2.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,7 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v3.2.0] 촬영 뒤 감정서에 실제로 담길 타원 얼굴을 미리 보여 줌
 #   - [v3.1.0] 카메라가 안 열릴 때 짚어 볼 것을 화면에 넣음(가상 카메라·권한·점유 등)
 #   - [v3.0.0] 주소를 asoul.ssirn.co.kr 로 · opencv 4.x 고정(5.0 에 Haar 없음)
 #   - [v2.9.2] 얼굴을 찾아 타원에 꽉 맞게 자름 (전에는 얼굴이 원 밖으로 삐져나왔다)
@@ -59,10 +60,10 @@ import time
 import base64
 import json
 import requests
-import llm_client
-import mailer
-import leads
-import faceutil  # 사내 LLM 서버(OpenAI 호환) 클라이언트
+import llm_client   # 사내 LLM 서버(OpenAI 호환) 클라이언트
+import mailer       # 감정서 메일 (SMTP 릴레이)
+import leads        # 남긴 사람 보관 (SQLite)
+import faceutil     # 얼굴 찾아 자르기 — 화면·메일·DB 가 같은 기준을 쓴다
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
@@ -260,6 +261,13 @@ st.markdown("""
         border: 2px dashed #7D5A5A;
         border-radius: 10px;
         padding: 20px;
+    }
+    /* 찍고 난 뒤 위젯이 되비추는 원본 사진은 감춘다.
+       바로 아래에서 감정서에 실제로 들어갈 타원 얼굴을 보여 주므로,
+       배경까지 다 나온 원본을 겹쳐 두면 산만하고 결과와도 딴판이다.
+       촬영 전 미리보기는 <video> 라 그대로 남는다 — <img> 만 고른다. */
+    [data-testid="stCameraInput"] img {
+        display: none !important;
     }
     /* 상태 텍스트 스타일 조정 */
     .status-text {
@@ -543,7 +551,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.1.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.2.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -609,7 +617,27 @@ elif input_method == "📂 앨범 선택":
 # --- 11. 관상 분석 로직 ---
 if st.session_state.final_image:
     st.write("---")
-    st.image(st.session_state.final_image, caption="✅ 선택된 얼굴", use_container_width=True)
+
+    # 원본을 그대로 보여 주면 배경까지 다 나와 감정서와 딴판이 된다.
+    # 감정서·보관에 실제로 쓰이는 것과 **같은 faceutil** 로 잘라 보여 준다.
+    # 그래야 여기서 본 얼굴과 메일로 받는 얼굴이 늘 같다.
+    _p1, _p2, _p3 = st.columns([1, 1.1, 1])
+    try:
+        _src = Image.open(st.session_state.final_image)   # PIL 이 알아서 처음으로 되감는다
+        _found = faceutil.find_face(_src) is not None
+        with _p2:
+            st.image(faceutil.oval_png(_src),
+                     caption="✅ 감정서에 담길 얼굴",
+                     use_container_width=True)
+        if not _found:
+            st.info("얼굴을 또렷이 찾지 못해 가운데를 잘랐소. "
+                    "정면으로, 밝은 곳에서 다시 담으면 더 낫소.")
+    except Exception as _e:
+        # 미리보기가 어긋나도 감정은 계속되어야 한다. 원본으로 물러선다.
+        print(f"[preview] 얼굴 미리보기 실패: {_e}", flush=True)
+        with _p2:
+            st.image(st.session_state.final_image, caption="✅ 선택된 얼굴",
+                     use_container_width=True)
 
     # 사진만으로는 나이를 자주 틀린다 — 60대를 40대로 보기도 한다.
     # 알려 주면 그 값으로 감정하고, 비워 두면 아솔이 스스로 추정한다.
