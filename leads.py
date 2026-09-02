@@ -4,7 +4,7 @@
 개인정보라 다루는 규칙을 코드에 박아 둔다 — 화면에 적어 둔 약속과
 실제 동작이 어긋나면 그게 제일 나쁘다.
 
-  · 수집 항목 : 이름, 이메일, 휴대전화번호
+  · 수집 항목 : 이름, 이메일, 휴대전화번호, 얼굴 사진(정규화한 크롭)
   · 수집 목적 : 감정서 발송
   · 보유 기간 : RETAIN_DAYS 일. **열 때마다 지난 것을 실제로 지운다.**
   · 동의 없이는 저장하지 않는다(save 가 거부한다).
@@ -64,13 +64,17 @@ def init():
                 mail_msg TEXT
             )""")
         c.execute("CREATE INDEX IF NOT EXISTS leads_ts ON leads(ts)")
+        # 이미 만들어진 DB 에도 사진 칸을 붙인다(v2.9.2 에서 추가).
+        cols = [r[1] for r in c.execute("PRAGMA table_info(leads)")]
+        if "photo" not in cols:
+            c.execute("ALTER TABLE leads ADD COLUMN photo BLOB")
         cut = (datetime.datetime.now()
                - datetime.timedelta(days=RETAIN_DAYS)).isoformat(timespec="seconds")
         cur = c.execute("DELETE FROM leads WHERE ts < ?", (cut,))
         return cur.rowcount
 
 
-def save(name, email, phone, consent, meta=None):
+def save(name, email, phone, consent, meta=None, photo_png=None):
     """한 사람을 저장한다. 돌려주는 값은 (성공여부, 설명).
 
     **동의가 없으면 저장하지 않는다.** 화면에서 막더라도 여기서 한 번 더 막는다 —
@@ -88,12 +92,14 @@ def save(name, email, phone, consent, meta=None):
         init()
         with _conn() as c:
             c.execute(
-                "INSERT INTO leads (ts,name,email,phone,gender,age,model,mail_ok,mail_msg)"
-                " VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO leads"
+                " (ts,name,email,phone,gender,age,model,mail_ok,mail_msg,photo)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (datetime.datetime.now().isoformat(timespec="seconds"),
                  name.strip(), email.strip(), normalize_phone(phone),
                  m.get("gender"), m.get("age"), m.get("model"),
-                 1 if m.get("mail_ok") else 0, m.get("mail_msg")))
+                 1 if m.get("mail_ok") else 0, m.get("mail_msg"),
+                 sqlite3.Binary(photo_png) if photo_png else None))
         return True, "저장했습니다."
     except sqlite3.Error as e:
         # 저장 실패로 감정서까지 막지는 않는다. 다만 성공한 척도 하지 않는다.
@@ -111,8 +117,8 @@ def count():
 
 NOTICE = """**개인정보 수집·이용 동의**
 
-- **수집 항목** — 이름, 이메일 주소, 휴대전화번호
-- **수집 목적** — 관상 감정서 발송 및 관련 문의 응대
+- **수집 항목** — 이름, 이메일 주소, 휴대전화번호, **얼굴 사진**
+- **수집 목적** — 관상 감정서 발송 및 관련 문의 응대, 서비스 개선
 - **보유 기간** — 수집일로부터 **%d일**, 지나면 자동으로 지워집니다
 - 동의를 **거부하실 수 있습니다.** 거부해도 아래 **[화면으로만 보기]** 로
   전체 감정서를 그대로 보실 수 있습니다.

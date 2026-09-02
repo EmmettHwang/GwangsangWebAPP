@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.9.1 (2026-09-02)
+# Version: v2.9.2 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,8 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.9.2] 얼굴을 찾아 타원에 꽉 맞게 자름 (전에는 얼굴이 원 밖으로 삐져나왔다)
+#   - [v2.9.2] 얼굴 크롭을 DB 에도 보관 + 그에 맞게 고지 문구 수정
 #   - [v2.9.1] 감정서 메일에 얼굴 사진(세로 타원)과 기본 분석 결과를 함께 넣음
 #   - [v2.9.0] 메일로 받으려면 이름·이메일·전화번호를 동의받아 수집(SQLite)
 #   - [v2.9.0] 버튼을 [메일로 받기] / [화면으로만 보기] 둘로 분리
@@ -57,7 +59,8 @@ import json
 import requests
 import llm_client
 import mailer
-import leads  # 사내 LLM 서버(OpenAI 호환) 클라이언트
+import leads
+import faceutil  # 사내 LLM 서버(OpenAI 호환) 클라이언트
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
@@ -538,7 +541,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.9.1)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.9.2)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -1087,10 +1090,19 @@ if st.session_state.get("last_result"):
                         st.session_state.mail_note = (_ok, _note)
                         # 발송 결과까지 함께 남긴다 — 나중에 "안 왔다"는 문의가
                         # 오면 이 줄이 있어야 무슨 일이 있었는지 알 수 있다.
+                        # 보관용 얼굴 크롭. 메일의 타원과 같은 기준으로 자르되
+                        # 마스크는 씌우지 않는다 — 나중에 다른 데 쓰려면 가려지지
+                        # 않은 쪽이 훨씬 쓸모 있다.
+                        try:
+                            _face = faceutil.face_jpeg(_img)
+                        except Exception as _e:
+                            print("[face] 크롭 실패:", _e, flush=True)
+                            _face = None
                         _sv_ok, _sv_msg = leads.save(
                             _name, _mail, _phone, _agree,
                             {"gender": _b.get("gender"), "age": _b.get("age_range"),
-                             "model": _model, "mail_ok": _ok, "mail_msg": _note})
+                             "model": _model, "mail_ok": _ok, "mail_msg": _note},
+                            photo_png=_face)
                         if not _sv_ok:
                             # 화면에는 안 띄운다(보는 사람이 할 수 있는 일이 없다).
                             # 대신 서버 로그에 남겨 우리가 알아채게 한다.
@@ -1207,7 +1219,8 @@ if st.session_state.get("last_result"):
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
-    <p>🔒 <b>개인정보 보호:</b> 모든 사진은 분석 후 즉시 삭제됩니다.</p>
+    <p>🔒 <b>개인정보:</b> 감정서를 <b>메일로 받으신 경우에만</b> 이름·연락처·얼굴 사진을
+       1년간 보관하고, 지나면 자동으로 지웁니다. 그 외에는 아무것도 저장하지 않습니다.</p>
     <p>🎲 <b>엔터테인먼트 목적:</b> 본 서비스는 재미를 위한 것으로, 실제 운세와 무관합니다.</p>
     <p style="margin-top: 20px; color: #999; font-size: 12px;">
         🧙‍♂️ 관상가 아솔 © 2025 | Powered by 사내 LLM 서버

@@ -2,3 +2,4 @@ streamlit
 requests
 Pillow
 fpdf2>=2.7.4
+opencv-python-headless

@@ -18,11 +18,12 @@
 import os
 import re
 import html
-import io
 import smtplib
 import ssl
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parseaddr
+
+import faceutil
 
 # 완벽한 검사는 불가능하다. 오타를 걸러 주는 정도면 충분하다.
 EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[A-Za-z]{2,}$")
@@ -60,40 +61,9 @@ def status() -> str:
     return f"{c['host']}:{c['port']} ({c['mode']}) 로 보냅니다."
 
 
-def oval_png(img, w=240, h=320, bg=(255, 255, 255)):
-    """얼굴 사진을 세로로 긴 타원으로 잘라 PNG 바이트로 돌려준다.
-
-    메일에서는 CSS ``border-radius`` 를 믿을 수 없다(Outlook 이 무시한다).
-    그래서 **이미지 자체를 타원으로** 만들어 둔다. 투명 PNG 도 배경색이
-    제각각인 클라이언트에서 지저분해지므로, 흰 바탕에 올려 불투명하게 굽는다.
-
-    가장자리는 4배로 그린 마스크를 줄여 부드럽게 만든다(안티에일리어싱).
-    """
-    from PIL import Image, ImageDraw
-
-    im = img.convert("RGB")
-    # 얼굴은 가운데 위쪽에 있으므로, 세로로 자를 때 위를 조금 더 남긴다.
-    tw, th = w, h
-    sw, sh = im.size
-    scale = max(tw / sw, th / sh)
-    im = im.resize((max(1, int(sw * scale)), max(1, int(sh * scale))),
-                   Image.LANCZOS)
-    sw, sh = im.size
-    left = (sw - tw) // 2
-    top = int((sh - th) * 0.38)          # 정가운데(0.5)보다 위
-    im = im.crop((left, top, left + tw, top + th))
-
-    S = 4
-    mask = Image.new("L", (tw * S, th * S), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, tw * S - 1, th * S - 1), fill=255)
-    mask = mask.resize((tw, th), Image.LANCZOS)
-
-    out = Image.new("RGB", (tw, th), bg)
-    out.paste(im, (0, 0), mask)
-
-    buf = io.BytesIO()
-    out.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+# 얼굴 자르기는 faceutil 이 맡는다 — 메일에 나가는 얼굴과 DB 에 남는
+# 얼굴이 같은 기준으로 잘려야 하기 때문이다.
+oval_png = faceutil.oval_png
 
 
 def _info_html(info):
@@ -114,20 +84,51 @@ def _info_html(info):
 
 
 def _to_html(md: str) -> str:
-    """감정서 마크다운을 메일용 HTML 로. 완전한 변환기가 아니라
-    이 앱이 실제로 쓰는 문법(**굵게** · 목록 · 줄바꿈)만 다룬다."""
+    """감정서 마크다운을 메일용 HTML 로.
+
+    완전한 변환기가 아니라 **이 앱의 모델이 실제로 쓰는 문법**만 다룬다.
+    제목(#)을 빠뜨렸다가 전체 감정서에서 "## 아솔의 감정서" 가 그대로 보였다 —
+    맛보기 양식에는 # 이 없어서 한참 몰랐다.
+    """
     out = []
     for raw in md.split("\n"):
         line = html.escape(raw.rstrip())
         line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
         line = re.sub(r"(?<!\*)\*([^*]+?)\*(?!\*)", r"<em>\1</em>", line)
-        s = line.strip()
-        if not s:
+        t = line.strip()
+
+        if not t:
             out.append("<div style='height:10px'></div>")
-        elif s.startswith("- "):
-            out.append(f"<div style='margin:4px 0 4px 14px'>• {s[2:]}</div>")
-        else:
-            out.append(f"<div style='margin:6px 0'>{s}</div>")
+            continue
+
+        # 구분선
+        if re.match(r"^(-{3,}|\*{3,}|_{3,})$", t):
+            out.append("<hr style='border:0;border-top:1px solid #ece5e5;"
+                       "margin:18px 0'>")
+            continue
+
+        # 제목 — 여기가 빠져 있었다
+        m = re.match(r"^(#{1,6})\s*(.*)$", t)
+        if m:
+            lv = len(m.group(1))
+            size = {1: 21, 2: 18, 3: 16}.get(lv, 15)
+            top = 20 if lv <= 2 else 16
+            out.append("<div style='font-size:%dpx;font-weight:700;color:#7D5A5A;"
+                       "margin:%dpx 0 7px;line-height:1.45'>%s</div>"
+                       % (size, top, m.group(2)))
+            continue
+
+        # 글머리표
+        if t.startswith("- ") or t.startswith("* "):
+            out.append("<div style='margin:4px 0 4px 14px'>&bull; %s</div>" % t[2:])
+            continue
+
+        # 번호 목록
+        if re.match(r"^\d+\.\s", t):
+            out.append("<div style='margin:4px 0 4px 14px'>%s</div>" % t)
+            continue
+
+        out.append("<div style='margin:6px 0'>%s</div>" % t)
     return "\n".join(out)
 
 
