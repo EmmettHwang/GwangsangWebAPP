@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v2.7.0 (2026-09-02)
+# Version: v2.8.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,9 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v2.8.0] 나이를 직접 일러 줄 수 있게 (사진만으로는 60대를 40대로 보기도 한다)
+#   - [v2.8.0] 맛보기 600자 -> [자세히 보기] 로 전체 1200자, 메일로도 발송
+#   - [v2.8.0] 감정서를 버튼 블록 밖에서 그린다 (다시 그려도 사라지지 않게)
 #   - [v2.7.0] 감정서를 쓰는 동안 글자수·경과시간과 쓰고 있는 대목을 실시간 표시
 #              (GPU 는 도는데 화면이 멈춘 것처럼 보이던 문제)
 #   - [v2.6.0] AI 백엔드를 사내 LLM 서버(OpenAI 호환)로 완전 교체
@@ -48,7 +51,8 @@ import time
 import base64
 import json
 import requests
-import llm_client  # 사내 LLM 서버(OpenAI 호환) 클라이언트
+import llm_client
+import mailer  # 사내 LLM 서버(OpenAI 호환) 클라이언트
 
 # --- 1. 기본 설정 ---
 st.set_page_config(
@@ -521,6 +525,130 @@ def try_model_with_image(model_name, prompt, image, on_progress=None):
     return llm_client.generate_with_image(model_name, prompt, image,
                                           on_progress=on_progress)
 
+# --- 8-b. 감정서 프롬프트 ---
+# 맛보기(600자)와 전체(1200자 이상)가 같은 양식을 쓰되 분량 지시만 다르다.
+# 양식까지 따로 두면 두 감정서가 따로 놀아 이어 읽기 어색해진다.
+SHORT_RULE = """전체 분량: **600자 내외**로 짧게 압축하시오. 이것은 맛보기 감정서요.
+   각 항목은 1~2문장으로 줄이고, 하위 세부 항목은 묶어서 쓰시오.
+   큰 제목은 모두 남기되 내용은 짧게 쓰시오.
+   다만 '자세한 것은 나중에' 처럼 다음을 예고하는 말은 넣지 마시오 - 그 안내는 화면이 따로 하오."""
+FULL_RULE = "전체 분량: **최소 1200자 이상** 작성. 각 항목을 앞서보다 훨씬 깊고 구체적으로."
+
+
+def build_prompt(gender_age_info, detailed=False):
+    """감정서 프롬프트. detailed=True 면 전체판."""
+    return PROMPT_FORM.format(
+        gender_age_info=gender_age_info,
+        length_rule=(FULL_RULE if detailed else SHORT_RULE))
+
+
+PROMPT_FORM = """당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
+이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 **매우 상세하고 긍정적으로** 재미있게 봐주세요.
+말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려", "~하옵니다")을 사용하세요.{gender_age_info}
+
+[아솔의 감정서 양식]
+
+🎭 **인상 총평 및 삼정(三停) 분석**
+- **첫인상**: 이 사람의 첫인상과 전체적인 기운을 매우 긍정적으로 묘사 (최소 5-6문장)
+  - 전체적인 얼굴 균형과 조화
+  - 눈에 띄는 장점과 매력 포인트
+  - 타고난 복과 기운
+- **상정(上停, 이마 부분)**: 이마의 넓이, 높이, 굴곡으로 보는 초년운(0-30세) 매우 상세 분석 (5문장 이상)
+  - 학업운과 지적 능력
+  - 부모덕과 조상덕
+  - 20대 운세의 흐름
+- **중정(中停, 눈썹-코)**: 눈썹과 코의 형태로 보는 중년운(30-50세) 매우 상세 분석 (5문장 이상)
+  - 재물운과 사업운
+  - 배우자운과 가정운
+  - 30-40대 전성기 예측
+- **하정(下停, 인중-턱)**: 입과 턱의 형태로 보는 말년운(50세 이후) 상세 분석 (4문장 이상)
+  - 자손운과 복록
+  - 노년의 건강과 재물
+  - 말년의 안정감
+
+💰 **재물운 및 사업운**
+- **코(재물궁)**: 코의 크기, 높이, 콧방울 상태로 보는 재물 축적 능력 (최소 6-7문장)
+  - 코의 전체적인 형태 분석
+  - 재물을 모으는 능력과 방식
+  - 큰돈을 만질 시기
+  - 투자 성향과 재테크 능력
+  - 사업 수완
+- **광대뼈**: 권력운과 리더십, 사회적 지위 분석 (3문장)
+- **돈을 버는 스타일**: 투자형인지, 근면형인지, 사업형인지 매우 구체적으로 설명 (4문장)
+- **재물이 들어오는 시기**: 20대, 30대, 40대, 50대별 재물운 상세 설명
+- **재물 증식 방법**: 어떤 방식으로 돈을 불릴 수 있는지
+- **주의할 점**: 재물 손실 가능성 (긍정적으로 조언)
+
+❤️ **연애운 및 애정운**
+- **눈매(처첩궁)**: 눈의 크기, 각도, 눈빛으로 보는 이성운 (최소 6-7문장)
+  - 눈의 전체적인 인상
+  - 이성에게 주는 매력
+  - 연애 스타일과 패턴
+  - 애정운이 강한 시기
+  - 이성과의 궁합
+- **입술**: 애정 표현 방식과 연애 스타일 (3문장)
+- **도화살 유무**: 이성에게 인기가 많은 타입인지 구체적으로
+- **이상형**: 어떤 스타일의 사람을 좋아하는지 자세히
+- **결혼운**: 언제쯤 결혼할 가능성이 높은지, 결혼 후 생활
+- **배우자의 특징**: 미래 배우자의 성격, 외모, 직업 특징 (4문장)
+- **애정 관계 조언**: 연애를 잘하는 방법
+
+🏆 **직업운 및 적성**
+- **이마와 눈썹**: 학업 능력과 지적 수준 상세 분석 (3문장)
+- **적합한 직업군**: 구체적인 직업 5-7가지 추천 + 이유
+- **승진운과 출세운**: 조직에서의 성공 가능성 매우 상세히 (4문장)
+- **창업 적성**: 사업가 기질, 어떤 사업이 잘 맞는지 (3문장)
+- **재능과 특기**: 숨겨진 재능 발견
+- **성공 시기**: 몇 살에 크게 성공할 가능성
+
+🍀 **건강운 및 주의사항**
+- **얼굴 색**: 현재 건강 상태 긍정적 분석 (2문장)
+- **특정 부위**: 주의해야 할 신체 부위 (부드럽게 조언)
+- **건강 관리 조언**: 구체적인 건강 관리법 3가지
+- **장수와 복**: 전반적인 건강운
+
+👥 **대인관계 및 성격**
+- **귀**: 복과 장수, 재물 흡수력 (3문장)
+- **눈썹**: 형제운, 친구운, 인복 (3문장)
+- **입**: 말솜씨와 대인관계 능력 (3문장)
+- **성격 특징**: 장점 5가지, 보완할 점 2가지 (각각 상세히)
+- **리더십**: 사람을 이끄는 능력
+- **인맥운**: 귀인을 만나는 운
+
+🔮 **아솔의 특별 처방**
+- **개운 방향**: 길한 방향 (동서남북 중) + 이유
+- **개운 색상**: 도움이 되는 색깔 2-3가지 + 활용법
+- **주의해야 할 시기**: 조심해야 할 나이나 시기 + 대처법
+- **운을 높이는 습관**: 구체적인 행동 지침 5가지
+- **부적 제안**: 몸에 지니면 좋을 물건이나 액세서리 3가지
+- **개운 음식**: 먹으면 좋은 음식
+- **개운 장소**: 가면 좋은 장소
+
+⭐ **종합 운세 평가 (별 5개 만점)**
+- 재물운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
+- 애정운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
+- 건강운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
+- 직업운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
+- 종합 평가: 한 줄 긍정적 요약
+
+📜 **아솔의 한마디**
+- 마지막으로 이 사람에게 용기와 희망을 주는 따뜻한 말 (4-5문장)
+- 미래에 대한 긍정적 전망
+- 응원의 메시지
+
+**작성 지침:**
+1. 각 항목마다 **최소 4-5문장 이상** 매우 상세하게 작성
+2. 구체적인 나이, 시기, 숫자를 언급하여 신빙성 높이기
+3. **긍정 50% + 현실적 조언 50%** 비율 유지 
+4. **별점은 적절하게 
+5. 이모티콘 적절히 사용 (과하지 않게)
+6. **굵게**, *이탤릭* 강조 문법 활용
+7. {length_rule}
+8. 재미있고 읽기 쉽게, 하지만 충분히 전문적으로
+9. 사람들에게 희망과 용기를 주는 톤 유지
+10. 단점보다는 보완 가능한 점으로 부드럽게 표현
+"""
+
 # --- 9. 세션 초기화 ---
 if 'final_image' not in st.session_state:
     st.session_state.final_image = None
@@ -528,6 +656,9 @@ if 'last_result' not in st.session_state:
     st.session_state.last_result = None
 if 'last_model' not in st.session_state:
     st.session_state.last_model = None
+# 기본 정보(성별·나이·직업)와 전체 감정서. 결과를 버튼 블록 밖에서 그리기 위해 담아 둔다.
+for _k in ('basic', 'full_result', 'mail_note', 'told_age', 'told_gender'):
+    st.session_state.setdefault(_k, None)
 
 # --- 10. 메인 UI ---
 print("=" * 80, flush=True)
@@ -536,7 +667,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.7.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v2.8.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -563,6 +694,35 @@ elif input_method == "📂 앨범 선택":
 if st.session_state.final_image:
     st.write("---")
     st.image(st.session_state.final_image, caption="✅ 선택된 얼굴", use_container_width=True)
+
+    # 사진만으로는 나이를 자주 틀린다 — 60대를 40대로 보기도 한다.
+    # 알려 주면 그 값으로 감정하고, 비워 두면 아솔이 스스로 추정한다.
+    st.write("")
+    st.markdown("##### 🎂 나이를 일러 주시면 훨씬 잘 맞소")
+    _c1, _c2 = st.columns([1, 1.3])
+    with _c1:
+        _dec = st.selectbox(
+            "연대",
+            ["🤖 아솔이 알아서 보겠소"] + [f"{d}대" for d in range(10, 90, 10)] + ["90대 이상"],
+            key="ui_dec")
+    _auto_age = _dec.startswith("🤖")
+    with _c2:
+        _part = st.radio("구간", ["초반", "중반", "후반"], index=1, horizontal=True,
+                         key="ui_part", disabled=_auto_age,
+                         help="40대 초반 · 중반 · 후반처럼 잡아 주시오.")
+    _gsel = st.radio("성별", ["🤖 아솔이 알아서", "남성", "여성"], horizontal=True,
+                     key="ui_gender")
+
+    # 위젯 값을 그대로 두면 헷갈리니, 쓰기 좋은 형태로 옮겨 담는다.
+    if _auto_age:
+        st.session_state.told_age = None
+    elif _dec == "90대 이상":
+        st.session_state.told_age = "90대 이상"
+    else:
+        st.session_state.told_age = f"{_dec} {_part}"
+    st.session_state.told_gender = (None if _gsel.startswith("🤖")
+                                    else ("남자 사람" if _gsel == "남성" else "여자 사람"))
+    st.write("")
 
     if st.button("🔮 아솔에게 관상 묻기", type="primary"):
         print("=" * 80, flush=True)
@@ -705,6 +865,14 @@ if st.session_state.final_image:
             print(f"[DEBUG] 최종 age_range: {age_range}", flush=True)
             print(f"[DEBUG] 최종 current_jobs: {current_jobs}", flush=True)
             print(f"[DEBUG] 최종 suitable_jobs: {suitable_jobs}", flush=True)
+
+            # 알려 준 값이 있으면 그것으로 감정한다. 추정값은 따로 남겨
+            # 화면에서 "아솔은 이렇게 보았소만" 하고 정직하게 같이 보여 준다.
+            ai_age, ai_gender = age_range, gender
+            if st.session_state.told_age:
+                age_range = st.session_state.told_age
+            if st.session_state.told_gender:
+                gender = st.session_state.told_gender
             
             # 분석 결과 표시
             result_text = f"👤 **{gender}**"
@@ -793,113 +961,7 @@ if st.session_state.final_image:
 - 직업 적성 분석 시 위 직업 정보 고려
 """
             
-            prompt = f"""
-당신의 이름은 '아솔'입니다. 조선 팔도에서 가장 용한 전설적인 관상가입니다.
-이 사진의 인물을 보고 다음 내용을 바탕으로 관상을 **매우 상세하고 긍정적으로** 재미있게 봐주세요.
-말투는 위엄 있으면서도 친근한 사극 톤("~하오", "~이오", "~구려", "~하옵니다")을 사용하세요.{gender_age_info}
-
-[아솔의 감정서 양식]
-
-🎭 **인상 총평 및 삼정(三停) 분석**
-- **첫인상**: 이 사람의 첫인상과 전체적인 기운을 매우 긍정적으로 묘사 (최소 5-6문장)
-  - 전체적인 얼굴 균형과 조화
-  - 눈에 띄는 장점과 매력 포인트
-  - 타고난 복과 기운
-- **상정(上停, 이마 부분)**: 이마의 넓이, 높이, 굴곡으로 보는 초년운(0-30세) 매우 상세 분석 (5문장 이상)
-  - 학업운과 지적 능력
-  - 부모덕과 조상덕
-  - 20대 운세의 흐름
-- **중정(中停, 눈썹-코)**: 눈썹과 코의 형태로 보는 중년운(30-50세) 매우 상세 분석 (5문장 이상)
-  - 재물운과 사업운
-  - 배우자운과 가정운
-  - 30-40대 전성기 예측
-- **하정(下停, 인중-턱)**: 입과 턱의 형태로 보는 말년운(50세 이후) 상세 분석 (4문장 이상)
-  - 자손운과 복록
-  - 노년의 건강과 재물
-  - 말년의 안정감
-
-💰 **재물운 및 사업운**
-- **코(재물궁)**: 코의 크기, 높이, 콧방울 상태로 보는 재물 축적 능력 (최소 6-7문장)
-  - 코의 전체적인 형태 분석
-  - 재물을 모으는 능력과 방식
-  - 큰돈을 만질 시기
-  - 투자 성향과 재테크 능력
-  - 사업 수완
-- **광대뼈**: 권력운과 리더십, 사회적 지위 분석 (3문장)
-- **돈을 버는 스타일**: 투자형인지, 근면형인지, 사업형인지 매우 구체적으로 설명 (4문장)
-- **재물이 들어오는 시기**: 20대, 30대, 40대, 50대별 재물운 상세 설명
-- **재물 증식 방법**: 어떤 방식으로 돈을 불릴 수 있는지
-- **주의할 점**: 재물 손실 가능성 (긍정적으로 조언)
-
-❤️ **연애운 및 애정운**
-- **눈매(처첩궁)**: 눈의 크기, 각도, 눈빛으로 보는 이성운 (최소 6-7문장)
-  - 눈의 전체적인 인상
-  - 이성에게 주는 매력
-  - 연애 스타일과 패턴
-  - 애정운이 강한 시기
-  - 이성과의 궁합
-- **입술**: 애정 표현 방식과 연애 스타일 (3문장)
-- **도화살 유무**: 이성에게 인기가 많은 타입인지 구체적으로
-- **이상형**: 어떤 스타일의 사람을 좋아하는지 자세히
-- **결혼운**: 언제쯤 결혼할 가능성이 높은지, 결혼 후 생활
-- **배우자의 특징**: 미래 배우자의 성격, 외모, 직업 특징 (4문장)
-- **애정 관계 조언**: 연애를 잘하는 방법
-
-🏆 **직업운 및 적성**
-- **이마와 눈썹**: 학업 능력과 지적 수준 상세 분석 (3문장)
-- **적합한 직업군**: 구체적인 직업 5-7가지 추천 + 이유
-- **승진운과 출세운**: 조직에서의 성공 가능성 매우 상세히 (4문장)
-- **창업 적성**: 사업가 기질, 어떤 사업이 잘 맞는지 (3문장)
-- **재능과 특기**: 숨겨진 재능 발견
-- **성공 시기**: 몇 살에 크게 성공할 가능성
-
-🍀 **건강운 및 주의사항**
-- **얼굴 색**: 현재 건강 상태 긍정적 분석 (2문장)
-- **특정 부위**: 주의해야 할 신체 부위 (부드럽게 조언)
-- **건강 관리 조언**: 구체적인 건강 관리법 3가지
-- **장수와 복**: 전반적인 건강운
-
-👥 **대인관계 및 성격**
-- **귀**: 복과 장수, 재물 흡수력 (3문장)
-- **눈썹**: 형제운, 친구운, 인복 (3문장)
-- **입**: 말솜씨와 대인관계 능력 (3문장)
-- **성격 특징**: 장점 5가지, 보완할 점 2가지 (각각 상세히)
-- **리더십**: 사람을 이끄는 능력
-- **인맥운**: 귀인을 만나는 운
-
-🔮 **아솔의 특별 처방**
-- **개운 방향**: 길한 방향 (동서남북 중) + 이유
-- **개운 색상**: 도움이 되는 색깔 2-3가지 + 활용법
-- **주의해야 할 시기**: 조심해야 할 나이나 시기 + 대처법
-- **운을 높이는 습관**: 구체적인 행동 지침 5가지
-- **부적 제안**: 몸에 지니면 좋을 물건이나 액세서리 3가지
-- **개운 음식**: 먹으면 좋은 음식
-- **개운 장소**: 가면 좋은 장소
-
-⭐ **종합 운세 평가 (별 5개 만점)**
-- 재물운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
-- 애정운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
-- 건강운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
-- 직업운: ⭐⭐⭐⭐⭐ (별 개수로 표시)
-- 종합 평가: 한 줄 긍정적 요약
-
-📜 **아솔의 한마디**
-- 마지막으로 이 사람에게 용기와 희망을 주는 따뜻한 말 (4-5문장)
-- 미래에 대한 긍정적 전망
-- 응원의 메시지
-
-**작성 지침:**
-1. 각 항목마다 **최소 4-5문장 이상** 매우 상세하게 작성
-2. 구체적인 나이, 시기, 숫자를 언급하여 신빙성 높이기
-3. **긍정 50% + 현실적 조언 50%** 비율 유지 
-4. **별점은 적절하게 
-5. 이모티콘 적절히 사용 (과하지 않게)
-6. **굵게**, *이탤릭* 강조 문법 활용
-7. 전체 분량: **최소 1200자 이상** 작성 (기존보다 50% 증가)
-8. 재미있고 읽기 쉽게, 하지만 충분히 전문적으로
-9. 사람들에게 희망과 용기를 주는 톤 유지
-10. 단점보다는 보완 가능한 점으로 부드럽게 표현
-"""
+            prompt = build_prompt(gender_age_info, detailed=False)
             
             # 6단계: 관상 분석 실행
             response = None
@@ -954,153 +1016,20 @@ if st.session_state.final_image:
             progress_bar.empty()
             status_text.empty()
             
-            # ===== 📊 기본 분석 결과 표시 =====
-            st.write("---")
-            st.subheader("📊 기본 분석 결과")
-            st.write("")  # 여백
-            
-            # result_text 생성 - 줄바꿈 개선
-            result_parts = []
-            result_parts.append(f"**성별**: {gender}")
-            result_parts.append("")  # 빈 줄
-            
-            if age_range:
-                result_parts.append(f"**추정 나이**: {age_range}")
-                result_parts.append("")  # 빈 줄
-            
-            if current_jobs:
-                job_list = ", ".join(current_jobs)
-                result_parts.append(f"**현재 직업 추정** (옷차림 70% + 관상 30%):")
-                result_parts.append(f"  {job_list}")
-                result_parts.append("")  # 빈 줄
-            
-            if suitable_jobs:
-                job_list = ", ".join(suitable_jobs)
-                result_parts.append(f"**어울리는 직업** (100% 관상):")
-                result_parts.append(f"  {job_list}")
-            
-            result_text = "\n".join(result_parts)
-            st.info(result_text)
-            
-            st.write("")  # 여백
-            st.markdown("💫 *추정이 맞으면 좋겠구려!*")
-            st.write("---")
-            # ===== 기본 분석 결과 표시 끝 =====
-
-            
-            # 결과 저장
+            # 결과는 세션에 담고, 그리기는 버튼 블록 밖에서 한다.
+            # 그래야 [자세히 보기]로 화면을 다시 그려도 감정서가 사라지지 않는다.
+            st.session_state.basic = {
+                "gender": gender, "age_range": age_range,
+                "ai_gender": ai_gender, "ai_age": ai_age,
+                "told_age": st.session_state.told_age,
+                "current_jobs": current_jobs, "suitable_jobs": suitable_jobs,
+                "gender_age_info": gender_age_info,
+            }
             st.session_state.last_result = response.text
             st.session_state.last_model = successful_model
-            
-            # 결과 표시
-            st.write("---")
-            st.subheader(f"📜 아솔의 관상 풀이")
-            st.caption(f"*by {successful_model} 장군신*")
-            st.markdown(response.text)
-            
-            # 복사 버튼
-            result_text_escaped = response.text.replace('`', '').replace('"', '\\"').replace('\n', '\\n')
-            st.components.v1.html(f"""
-            <div style="margin: 30px 0; text-align: center;">
-                <button onclick="copyResult()" style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    border: none;
-                    padding: 15px 40px;
-                    border-radius: 12px;
-                    font-size: 16px;
-                    font-weight: bold;
-                    cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-                    transition: all 0.3s;
-                    font-family: -apple-system, sans-serif;
-                " onmouseover="this.style.transform='translateY(-2px)';"
-                   onmouseout="this.style.transform='translateY(0)';">
-                    📋 관상 결과 복사하기
-                </button>
-                
-                <div id="copy-result-msg" style="
-                    margin-top: 15px;
-                    color: #28a745;
-                    font-weight: bold;
-                    font-size: 15px;
-                    min-height: 25px;
-                    opacity: 0;
-                    transition: opacity 0.3s;
-                "></div>
-            </div>
-            
-            <script>
-                function copyResult() {{
-                    var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwangsangapp-ryes95aziswadr3h9bhcug.streamlit.app/";
-                    
-                    var messageDiv = document.getElementById('copy-result-msg');
-                    var button = event.target;
-                    
-                    if (navigator.clipboard && navigator.clipboard.writeText) {{
-                        navigator.clipboard.writeText(resultText)
-                            .then(function() {{
-                                showCopySuccess(messageDiv, button);
-                            }})
-                            .catch(function() {{
-                                fallbackCopy(resultText, messageDiv, button);
-                            }});
-                    }} else {{
-                        fallbackCopy(resultText, messageDiv, button);
-                    }}
-                }}
-                
-                function fallbackCopy(text, messageDiv, button) {{
-                    var textarea = document.createElement('textarea');
-                    textarea.value = text;
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    
-                    try {{
-                        var successful = document.execCommand('copy');
-                        if (successful) {{
-                            showCopySuccess(messageDiv, button);
-                        }} else {{
-                            showCopyError(messageDiv);
-                        }}
-                    }} catch(err) {{
-                        showCopyError(messageDiv);
-                    }}
-                    
-                    document.body.removeChild(textarea);
-                }}
-                
-                function showCopySuccess(messageDiv, button) {{
-                    messageDiv.innerHTML = '✅ 관상 결과가 복사되었습니다!';
-                    messageDiv.style.opacity = '1';
-                    
-                    var originalText = button.innerHTML;
-                    button.innerHTML = '✅ 복사 완료!';
-                    button.style.background = '#28a745';
-                    
-                    setTimeout(function() {{
-                        messageDiv.style.opacity = '0';
-                        button.innerHTML = originalText;
-                        button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                    }}, 3000);
-                }}
-                
-                function showCopyError(messageDiv) {{
-                    messageDiv.innerHTML = '⚠️ 복사 실패. 수동으로 선택해서 복사해주세요.';
-                    messageDiv.style.color = '#dc3545';
-                    messageDiv.style.opacity = '1';
-                    
-                    setTimeout(function() {{
-                        messageDiv.style.opacity = '0';
-                        messageDiv.style.color = '#28a745';
-                    }}, 4000);
-                }}
-            </script>
-            """, height=120)
-            
-            st.balloons()
+            st.session_state.full_result = None
+            st.session_state.mail_note = None
+            st.rerun()
 
         except Exception as e:
             st.error(f"⚠️ 예기치 못한 에러가 났소. (내용: {e})")
@@ -1139,6 +1068,225 @@ if st.session_state.final_image:
             st.markdown("💫 *추정이 맞으면 좋겠구려!*")
             st.write("---")
             # ===== 기본 분석 결과 표시 끝 =====
+
+
+# --- 11-b. 감정서 표시 -------------------------------------------------------
+# 버튼 블록 **밖**에 둔다. [자세히 보기]로 화면을 다시 그려도 감정서가 살아남는다.
+if st.session_state.get("last_result"):
+    _b = st.session_state.get("basic") or {}
+    _is_full = bool(st.session_state.get("full_result"))
+    _shown = st.session_state.get("full_result") or st.session_state.last_result
+
+    # ===== 기본 분석 결과 =====
+    st.write("---")
+    st.subheader("📊 기본 분석 결과")
+    _parts = [f"**성별**: {_b.get('gender', '사람')}", ""]
+    if _b.get("age_range"):
+        _told = _b.get("told_age")
+        _parts.append(f"**나이**: {_b['age_range']}"
+                      + ("  *(일러 주신 나이)*" if _told else "  *(아솔의 추정)*"))
+        # 추정이 빗나갔으면 숨기지 않고 같이 보여 준다. 그래야 왜 물었는지 납득이 간다.
+        if _told and _b.get("ai_age") and _b["ai_age"] != _told:
+            _parts.append(f"  ↳ 아솔은 **{_b['ai_age']}**로 보았소만, "
+                          "일러 주신 나이로 감정하였소.")
+        _parts.append("")
+    if _b.get("current_jobs"):
+        _parts += ["**현재 직업 추정** (옷차림 70% + 관상 30%):",
+                   "  " + ", ".join(_b["current_jobs"]), ""]
+    if _b.get("suitable_jobs"):
+        _parts += ["**어울리는 직업** (100% 관상):",
+                   "  " + ", ".join(_b["suitable_jobs"])]
+    st.info("\n".join(_parts))
+
+    # ===== 감정서 =====
+    st.write("---")
+    st.subheader("📜 아솔의 관상 풀이" + ("" if _is_full else "  (맛보기)"))
+    st.caption(f"*by {st.session_state.last_model} 장군신*")
+    st.markdown(_shown)
+
+    if st.session_state.get("mail_note"):
+        _ok, _msg = st.session_state.mail_note
+        (st.success if _ok else st.warning)(_msg)
+
+    # ===== 자세히 보기 =====
+    if not _is_full:
+        st.write("---")
+        st.markdown("### 🔍 자세히 보기")
+        st.caption("여기까지는 맛보기였소. 전체 감정서는 두 배 넘게 길고, "
+                   "메일 주소를 남기면 그리로도 보내 드리오.")
+        with st.form("detail_form"):
+            _mail = st.text_input("메일 주소 (비워 두면 화면으로만 보오)",
+                                  placeholder="you@example.com")
+            _go = st.form_submit_button("📜 전체 감정서 보기", type="primary")
+
+        if _go:
+            _mail = (_mail or "").strip()
+            if _mail and not mailer.valid(_mail):
+                st.error("메일 주소를 다시 확인해 주시오.")
+            elif not st.session_state.final_image:
+                st.error("사진이 사라졌소. 다시 올려 주시오.")
+            else:
+                _pb = st.progress(0)
+                _sx = st.empty()
+                _live = st.empty()
+                _img = Image.open(st.session_state.final_image)
+                _prompt = build_prompt(_b.get("gender_age_info", ""), detailed=True)
+                _resp, _model = None, None
+
+                for _m in get_all_available_models():
+                    _dn = _m.split(":")[0].upper()
+                    _sx.markdown(
+                        f"<p class='status-text'>⚡ <strong>{_dn}</strong> 장군신이 "
+                        "붓을 고쳐 잡는 중...</p>", unsafe_allow_html=True)
+
+                    def _cb(text_so_far, chars, elapsed, _d=_dn):
+                        # 전체판 목표는 1200자. 그 비율로 진행률을 채운다.
+                        _pb.progress(min(99, int(99 * chars / 1200)))
+                        _sx.markdown(
+                            f"<p class='status-text'>🖌️ <strong>{_d}</strong> 장군신이 "
+                            f"자세한 감정서를 쓰는 중... <strong>{chars:,}자</strong> "
+                            f"· {elapsed:.0f}초</p>", unsafe_allow_html=True)
+                        _tail = text_so_far[-160:].replace("\n", " ")
+                        _live.markdown(
+                            "<div style='color:#8a7a7a;font-size:13px;line-height:1.7;"
+                            "padding:10px 14px;background:#faf7f7;"
+                            "border-left:3px solid #7D5A5A;border-radius:6px;"
+                            f"min-height:52px'>...{_tail}"
+                            "<span style='opacity:.5'>▌</span></div>",
+                            unsafe_allow_html=True)
+
+                    _resp, _err = try_model_with_image(_m, _prompt, _img,
+                                                       on_progress=_cb)
+                    if _resp is not None:
+                        _model = _dn
+                        break
+
+                _live.empty()
+                _pb.empty()
+                _sx.empty()
+
+                if _resp is None:
+                    st.error("모든 장군신이 휴식 중이오. 잠시 뒤 다시 청해 주시오.")
+                else:
+                    st.session_state.full_result = _resp.text
+                    st.session_state.last_model = _model
+                    st.session_state.mail_note = None
+                    if _mail:
+                        # 남긴 주소는 먼저 기록해 둔다. 발송이 실패해도 남는다.
+                        mailer.record(_mail, {"age": _b.get("age_range"),
+                                              "gender": _b.get("gender"),
+                                              "model": _model})
+                        st.session_state.mail_note = mailer.send(
+                            _mail, "📜 관상가 아솔의 감정서가 도착하였소",
+                            _resp.text,
+                            subtitle=f"{_b.get('gender', '')} · "
+                                     f"{_b.get('age_range', '')}".strip(" ·"))
+                    st.rerun()
+
+    # ===== 복사 버튼 =====
+    successful_model = st.session_state.last_model or ""
+    result_text_escaped = (_shown.replace("`", "")
+                                 .replace(chr(34), chr(92) + chr(34))
+                                 .replace("\n", chr(92) + "n"))
+    st.components.v1.html(f"""
+    <div style="margin: 30px 0; text-align: center;">
+        <button onclick="copyResult()" style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+            font-family: -apple-system, sans-serif;
+        " onmouseover="this.style.transform='translateY(-2px)';"
+           onmouseout="this.style.transform='translateY(0)';">
+            📋 관상 결과 복사하기
+        </button>
+        
+        <div id="copy-result-msg" style="
+            margin-top: 15px;
+            color: #28a745;
+            font-weight: bold;
+            font-size: 15px;
+            min-height: 25px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        "></div>
+    </div>
+    
+    <script>
+        function copyResult() {{
+            var resultText = "📜 관상가 아솔의 감정서 (by {successful_model} 장군신)\\n\\n{result_text_escaped}\\n\\n🧙‍♂️ 관상가 아솔 - https://gwansang.ssirn.co.kr/";
+            
+            var messageDiv = document.getElementById('copy-result-msg');
+            var button = event.target;
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {{
+                navigator.clipboard.writeText(resultText)
+                    .then(function() {{
+                        showCopySuccess(messageDiv, button);
+                    }})
+                    .catch(function() {{
+                        fallbackCopy(resultText, messageDiv, button);
+                    }});
+            }} else {{
+                fallbackCopy(resultText, messageDiv, button);
+            }}
+        }}
+        
+        function fallbackCopy(text, messageDiv, button) {{
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {{
+                var successful = document.execCommand('copy');
+                if (successful) {{
+                    showCopySuccess(messageDiv, button);
+                }} else {{
+                    showCopyError(messageDiv);
+                }}
+            }} catch(err) {{
+                showCopyError(messageDiv);
+            }}
+            
+            document.body.removeChild(textarea);
+        }}
+        
+        function showCopySuccess(messageDiv, button) {{
+            messageDiv.innerHTML = '✅ 관상 결과가 복사되었습니다!';
+            messageDiv.style.opacity = '1';
+            
+            var originalText = button.innerHTML;
+            button.innerHTML = '✅ 복사 완료!';
+            button.style.background = '#28a745';
+            
+            setTimeout(function() {{
+                messageDiv.style.opacity = '0';
+                button.innerHTML = originalText;
+                button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            }}, 3000);
+        }}
+        
+        function showCopyError(messageDiv) {{
+            messageDiv.innerHTML = '⚠️ 복사 실패. 수동으로 선택해서 복사해주세요.';
+            messageDiv.style.color = '#dc3545';
+            messageDiv.style.opacity = '1';
+            
+            setTimeout(function() {{
+                messageDiv.style.opacity = '0';
+                messageDiv.style.color = '#28a745';
+            }}, 4000);
+        }}
+    </script>
+    """, height=120)
 
 
 # --- 12. 하단 안내 및 푸터 ---
