@@ -139,10 +139,14 @@ def render(body_md: str, title: str, subtitle: str = "",
     photo_cid 를 주면 그 자리에 얼굴 사진을 넣는다. 이미지는 CID 로 붙인
     첨부라야 한다 — Gmail 은 ``src="data:..."`` 를 지운다.
     """
+    # 너비·높이는 faceutil 의 타원 크기와 **반드시 같아야** 한다. 메일 클라이언트는
+    # 이 값으로 자리를 잡으므로, 어긋나면 얼굴이 눌리거나 늘어나 보인다.
     photo_block = ("<div style='text-align:center;margin:0 0 14px'>"
-                   "<img src='cid:%s' width='240' height='320' alt='' "
+                   "<img src='cid:{cid}' width='{w}' height='{h}' alt='' "
                    "style='display:inline-block;border:0;outline:none;"
-                   "text-decoration:none'></div>" % photo_cid) if photo_cid else ""
+                   "text-decoration:none'></div>".format(
+                       cid=photo_cid,
+                       w=faceutil.OVAL_W, h=faceutil.OVAL_H)) if photo_cid else ""
     info_block = ("<div style='text-align:center;margin:0 0 20px;padding:14px 10px;"
                   "background:#faf7f7;border-radius:10px'>" + _info_html(info) + "</div>"
                   ) if _info_html(info) else ""
