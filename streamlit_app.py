@@ -1,6 +1,6 @@
 # ================================================================
 # 관상가 아솔 - Streamlit App
-# Version: v3.0.0 (2026-09-02)
+# Version: v3.1.0 (2026-09-02)
 # 수정 내용: 
 #   - 기본 분석 결과 UI 추가
 #   - AI 응답 디버그 출력
@@ -16,6 +16,7 @@
 #   - 초기 단계 디버깅 추가 (앱 시작, 버튼 클릭 감지)
 #   - print flush=True 추가 (로그 즉시 출력)
 #   - 여러 모델 자동 재시도 (최대 5개)\n#   - Hugging Face 무료 모델 fallback 추가\n#   - HF 모델 교체 (BLIP → Qwen2-VL-7B)\n#   - 에러 메시지 화면 제거 (로그만 출력)
+#   - [v3.1.0] 카메라가 안 열릴 때 짚어 볼 것을 화면에 넣음(가상 카메라·권한·점유 등)
 #   - [v3.0.0] 주소를 asoul.ssirn.co.kr 로 · opencv 4.x 고정(5.0 에 Haar 없음)
 #   - [v2.9.2] 얼굴을 찾아 타원에 꽉 맞게 자름 (전에는 얼굴이 원 밖으로 삐져나왔다)
 #   - [v2.9.2] 얼굴 크롭을 DB 에도 보관 + 그에 맞게 고지 문구 수정
@@ -542,7 +543,7 @@ print(f"⏰ 현재 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 print("=" * 80, flush=True)
 
 st.markdown("<h1 class='main-header'>🧙‍♂️ 관상가 '아솔'</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.0.0)</span></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 16px;'>조선 팔도를 떠돌며 수많은 관상을 봐온 전설의 관상가 <span style='color: #999; font-size: 12px;'>(v3.1.0)</span></p>", unsafe_allow_html=True)
 st.write("---")
 
 # 사진 입력 방식 선택
@@ -558,7 +559,47 @@ if input_method == "📸 직접 촬영":
     if camera_image:
         print("📸 카메라로 사진 촬영됨!", flush=True)
         st.session_state.final_image = camera_image
-        
+
+    # 카메라는 브라우저·기기 사정으로 자주 막힌다. 일반 사용자는 원인을 짐작조차
+    # 못 하고 "고장났다"고 여기므로, 흔한 경우를 순서대로 짚어 준다.
+    # 1번(가상 카메라)이 가장 안 잡히는 함정이다 — 권한은 멀쩡한데 화면만 검게 나온다.
+    with st.expander("📷 화면이 검게 나오거나 카메라가 안 열리시오? (눌러 보시오)"):
+        st.markdown("""
+**1. 검은 화면에 ❌ 표시가 떠 있다면 — 카메라가 여럿인 경우요**
+
+노트북에 가상 카메라(`Mirametrix`, `OBS`, `Snap Camera` 따위)가 깔려 있으면
+브라우저가 그쪽을 먼저 잡아 **검은 화면**만 나오오. 권한을 허락해도 마찬가지요.
+
+1. 크롬 주소창에 `chrome://settings/content/camera` 를 붙여넣으시오
+2. 맨 위 **카메라** 목록에서 진짜 카메라(예: `LGE Camera`, `HD Webcam`)를 고르시오
+3. 이 창으로 돌아와 **새로고침(F5)** 하시오
+
+> 이름에 `IR` 이 붙은 것은 얼굴인식 로그인용 적외선 카메라요. 흑백으로 나오니 피하시오.
+
+**2. 주소창의 카메라 아이콘이 ✕ 로 막혀 있다면**
+
+그 아이콘을 눌러 **허용**으로 바꾸고 **새로고침** 하시오.
+
+**3. 다른 프로그램이 카메라를 쓰고 있다면**
+
+줌·팀즈·카카오톡 영상통화 따위를 **완전히 끄고** 새로고침 하시오.
+
+**4. 노트북 덮개와 차단 키**
+
+렌즈 옆 **물리 덮개**가 닫혔거나 `F10` 같은 **카메라 차단 키**가 눌려 있는지 보시오.
+이때는 얼굴인식 로그인만 되고 브라우저는 안 되는 수가 있소.
+
+**5. 휴대폰이라면**
+
+- 아이폰은 **사파리**로 여시오 — 다른 앱 안에서 열면 카메라가 막히오
+- 안드로이드는 **크롬**으로 여시오
+
+---
+
+**그래도 열리지 않거든 위의 `📂 앨범 선택` 을 쓰시오.**
+이미 찍어 둔 사진으로도 관상은 똑같이 보아 드리오.
+        """)
+
 elif input_method == "📂 앨범 선택":
     uploaded_file = st.file_uploader("📂 사진을 선택하시오", type=['jpg', 'jpeg', 'png'], label_visibility="visible")
     if uploaded_file:
