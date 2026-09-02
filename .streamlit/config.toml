@@ -1,13 +1,17 @@
-[server]
-enableCORS = false
-enableXsrfProtection = true
-enableStaticServing = true
+# ⚠️ browser.serverAddress / serverPort 는 넣지 마시오.
+#    프론트엔드가 웹소켓 주소를 그 값으로 강제해 버려서, 리버스 프록시나
+#    Cloudflare 터널 뒤에 두면 화면이 영영 "연결 중"에 머문다.
+#    (예전에 "gwangsangapp.streamlit.app" 이 박혀 있어 배포할 때마다 깨졌다.
+#     Streamlit Cloud 든 우리 서버든 주소는 알아서 잡으므로 비워 두는 게 맞다.)
 
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+enableStaticServing = false
 
 [browser]
 gatherUsageStats = false
-serverAddress = "gwangsangapp.streamlit.app"
-serverPort = 443
 
 [theme]
 primaryColor = "#7D5A5A"
@@ -15,5 +19,3 @@ backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
 font = "sans serif"
-
-
