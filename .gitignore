@@ -1,4 +1,11 @@
+# 1. 비밀값 - 절대 커밋하지 않는다
+# 키는 한 번 올라가면 지워도 이력에 남고, 포크해 간 사람에게도 그대로 복사된다.
+# 실제로 옛 Gemini 키 두 개가 그렇게 남아 포크까지 따라갔다(2026-09-03 폐기).
+.env
+*.env
+!*.env.example
 .streamlit/secrets.toml
+
 testModel.py
 app copy.py
 
