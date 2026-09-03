@@ -149,6 +149,41 @@ button.ghost { border: none; background: none; color: var(--brand); padding: 4px
 .shots img { width: 100%; border-radius: 10px; display: block; }
 .shots figcaption { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
 
+/* ── 그동안의 얼굴 (넘겨 보기) ─────────────────────────
+   ★ 틀은 **늘 같은 자리·같은 크기**여야 한다. 사진마다 틀이 흔들리면
+     얼굴이 변한 것인지 화면이 움직인 것인지 알 수 없다. 그래서 크기를
+     3:4 로 못박고, 사진은 겹쳐 두었다가 보일 것만 드러낸다.
+     (`display` 를 여닫지 않고 `opacity` 로 바꾼다 — 다시 그리지 않으므로
+      0.1초로 넘겨도 깜빡이지 않는다.) */
+.film { max-width: 320px; margin: 0 auto; }
+.film .frame {
+  position: relative; aspect-ratio: 3 / 4; background: #14100f;
+  border-radius: 10px; overflow: hidden;
+}
+.film .frame img {
+  position: absolute; inset: 0; display: block;
+  width: 100%; height: 100%; object-fit: cover; opacity: 0;
+}
+.film .frame img.on { opacity: 1; }
+.stamp {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  margin-top: 9px; font-variant-numeric: tabular-nums;
+}
+.stamp b { font-size: 16.5px; letter-spacing: .01em; }
+.stamp .when { font-size: 12.5px; color: var(--muted); }
+.film .idx {
+  text-align: center; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.filmbar { display: flex; gap: 8px; margin-top: 12px; }
+.filmbar button { flex: 1; }
+.filmbar button.pri { flex: 1.6; }
+input[type=range] { width: 100%; accent-color: var(--brand); margin: 10px 0 0; }
+.ticks {
+  display: flex; justify-content: space-between;
+  font-size: 11.5px; color: var(--muted); margin-top: 2px;
+}
+
 /* ── 감정서 ────────────────────────────────────────── */
 #report { font-size: 15.5px; line-height: 1.9; }
 #report h1, #report h2, #report h3 { font-size: 17px; margin: 18px 0 6px; }

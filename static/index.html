@@ -20,7 +20,7 @@
   <!-- ── 유틸바 ────────────────────────────────────── -->
   <div class="util">
     <div class="left">
-      <div class="brand">🧙‍♂️ 웰니스 관상 ‘아솔’ <span class="ver">v4.0.0</span></div>
+      <div class="brand">🧙‍♂️ 웰니스 관상 ‘아솔’ <span class="ver">v4.1.0</span></div>
       <div class="tag">얼굴을 기억하고 안부를 묻는 관상가</div>
       <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="sm" id="btnAbout">ℹ️ 소개</button>
@@ -75,6 +75,30 @@
       <figure><img id="imgMesh" alt=""><figcaption>🔍 아솔이 읽은 얼굴</figcaption></figure>
     </div>
     <div id="faceNote"></div>
+  </div>
+
+  <!-- ── 그동안의 얼굴 ─────────────────────────────────
+       쌓인 얼굴을 **한 틀 안에서 겹쳐 넘긴다.** 나란히 늘어놓으면 눈이
+       여러 곳을 오가느라 달라진 데를 놓친다. 한 자리만 보고 있으면
+       움직이는 것이 곧 변화다. 사진 밑에 그날의 날짜를 적는다. -->
+  <div class="card hidden" id="albumCard">
+    <h2 class="sec">🎞️ 그동안의 얼굴</h2>
+    <div class="film">
+      <div class="frame" id="albumFrame"></div>
+      <div class="stamp"><b id="albumDate">—</b><span class="when" id="albumWhen"></span></div>
+      <div class="idx" id="albumIdx"></div>
+    </div>
+    <input type="range" id="albumSeek" min="0" max="0" step="1" value="0"
+           aria-label="몇 번째 얼굴">
+    <div class="filmbar">
+      <button class="sm" id="albumPrev">⏮ 앞</button>
+      <button class="pri" id="albumPlay">▶ 넘겨 보기</button>
+      <button class="sm" id="albumNext">뒤 ⏭</button>
+    </div>
+    <label class="f" for="albumSpeed">넘기는 빠르기 — 한 장에 <b id="albumSpeedLab">0.6초</b></label>
+    <input type="range" id="albumSpeed" min="0.1" max="5" step="0.1" value="0.6">
+    <div class="ticks"><span>0.1초 · 휙휙</span><span>5초 · 찬찬히</span></div>
+    <div class="hint" id="albumNote"></div>
   </div>
 
   <!-- ── 아솔이 본 것 ──────────────────────────────────

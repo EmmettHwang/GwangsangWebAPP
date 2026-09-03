@@ -11,6 +11,7 @@
 const $ = (id) => document.getElementById(id);
 const S = {
   image: null,        // 지금 다루는 사진 (data URI)
+  faceToday: null,    // 오늘 얼굴 크롭 — 넘겨 보기의 마지막 장
   person: null,       // 알아본 분
   basic: null,        // 성별·나이·직업
   report: '',         // 감정서 본문
@@ -232,6 +233,7 @@ async function prepare() {
     $('faceNote').innerHTML = n;
     S.person = j.person || null;
     S.candidate = j.candidate || null;
+    S.faceToday = j.face_today || null;
     $('ageCard').classList.remove('hidden');
 
     // ★ 낯이 아리송하면 **관상을 보기 전에** 결판을 낸다.
@@ -244,6 +246,7 @@ async function prepare() {
     if (amb) { askWhoAreYou(amb); return; }
 
     showGreet();
+    loadAlbum();           // 그동안의 얼굴 — 감정서를 기다리는 동안 넘겨 보시라고
     prefill();
     paint();
     read(false);           // 맛보기를 곧바로 시작한다 — 누를 일을 하나 줄인다
@@ -296,6 +299,127 @@ function showGreet() {
   }
   box.classList.remove('hidden');
 }
+
+/* ── 그동안의 얼굴 — 한 틀에서 넘겨 본다 ─────────────────────────
+ *
+ * 나란히 늘어놓지 않는다. 사진을 옆으로 늘어놓으면 눈이 이쪽저쪽을 오가며
+ * 견주어야 하는데, 사람 눈은 그렇게는 잘 못 본다. **한 자리에 겹쳐 놓고
+ * 넘기면** 달라진 데만 움직여 보인다. 사진 밑에 그날 날짜를 적어,
+ * 지금 보고 있는 얼굴이 언제의 것인지 늘 알게 한다.
+ *
+ * 빠르기는 0.1초에서 5초까지 손으로 고른다. 휙휙 넘기면 흐름이 보이고,
+ * 찬찬히 넘기면 한 장 한 장을 들여다볼 수 있다 — 보는 사람마다 원하는
+ * 바가 다르므로 우리가 정하지 않는다.
+ *
+ * ⚠️ 사진은 **표(album_token)를 낸 사람에게만** 온다. 표는 얼굴로 확신했거나
+ *    둘만 아는 이야기를 맞히신 그 자리에서만 끊긴다.
+ * ⚠️ 다 받아 놓고 나서 넘긴다. 넘기는 중에 받아 오면 느린 데서 멎어,
+ *    변화가 아니라 망설임처럼 보인다.
+ */
+const AL = { frames: [], i: 0, ms: 600, timer: 0, playing: false };
+
+function todayStr() {
+  const d = new Date(), z = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+}
+
+async function loadAlbum() {
+  albumPlay(false);
+  $('albumCard').classList.add('hidden');
+  const p = S.person;
+  const tok = (p && (p.sure || p.confirmed)) ? p.album_token : null;
+  if (!tok) return;
+
+  let j = null;
+  try {
+    const r = await fetch('/api/album?token=' + encodeURIComponent(tok));
+    j = await r.json();
+  } catch (e) { return; }
+  if (!j || !j.ok) return;
+
+  const list = (j.frames || []).map(f => ({
+    src: `/api/album/frame?token=${encodeURIComponent(tok)}&id=${f.id}`,
+    date: f.ts, days: f.days, today: false,
+  }));
+  // 오늘 담긴 얼굴을 **맨 뒤에** 붙인다. 마지막 장이 오늘이어야 "그동안"이
+  // 오늘에 닿는다. 아직 담기 전이라는 것은 밑에 적어 알린다.
+  // (오늘 것이 이미 쌓여 있으면 붙이지 않는다 — 같은 날이 둘이 된다.)
+  if (S.faceToday && !(list.length && list[list.length - 1].date === todayStr()))
+    list.push({ src: S.faceToday, date: todayStr(), days: 0, today: true });
+  if (list.length < 2) return;         // 한 장뿐이면 넘겨 볼 것이 없다
+
+  AL.frames = list; AL.i = 0;
+  const box = $('albumFrame');
+  box.innerHTML = '';
+  $('albumNote').textContent = '얼굴을 불러오는 중이오…';
+  ['albumPlay', 'albumPrev', 'albumNext'].forEach(i => ($(i).disabled = true));
+  $('albumSeek').max = list.length - 1;
+  $('albumSeek').value = 0;
+
+  let left = list.length;
+  const settle = () => {
+    if (--left > 0) return;
+    ['albumPlay', 'albumPrev', 'albumNext'].forEach(i => ($(i).disabled = false));
+    $('albumNote').innerHTML =
+      `얼굴 <b>${list.length}장</b>이 쌓였소. 오래된 것부터 넘겨 드리리다.` +
+      (list[list.length - 1].today ? ' 마지막 장은 오늘 담긴 얼굴이오.' : '') +
+      '<br>얼굴은 본디 천천히 바뀌오. 병을 가려내는 것이 아니라, 스스로 돌아보는 기록이오.';
+  };
+  list.forEach((f, k) => {
+    const im = new Image();
+    im.alt = f.today ? '오늘 얼굴' : (f.date + ' 의 얼굴');
+    im.decoding = 'async';
+    im.onload = settle;
+    im.onerror = settle;              // 한 장쯤 못 받아도 나머지는 넘겨 본다
+    im.src = f.src;
+    if (k === 0) im.classList.add('on');
+    box.appendChild(im);
+  });
+
+  albumShow(0);
+  $('albumCard').classList.remove('hidden');
+}
+
+function albumShow(i) {
+  const n = AL.frames.length; if (!n) return;
+  AL.i = ((i % n) + n) % n;
+  const kids = $('albumFrame').children;
+  for (let k = 0; k < kids.length; k++) kids[k].classList.toggle('on', k === AL.i);
+  const f = AL.frames[AL.i];
+  $('albumDate').textContent = f.date;
+  $('albumWhen').textContent = f.today ? '오늘 (아직 담기 전이오)'
+    : f.days === 0 ? '오늘'
+    : f.days === 1 ? '어제'
+    : (f.days || f.days === 0) ? `${f.days}일 전` : '';
+  $('albumIdx').textContent = `${AL.i + 1} / ${n}`;
+  $('albumSeek').value = AL.i;
+}
+
+function albumTick() {
+  albumShow(AL.i + 1);
+  AL.timer = setTimeout(albumTick, AL.ms);   // 빠르기를 그때그때 다시 읽는다
+}
+
+function albumPlay(on) {
+  clearTimeout(AL.timer); AL.timer = 0;
+  AL.playing = !!on;
+  const b = $('albumPlay');
+  b.textContent = on ? '⏸ 멈추기' : '▶ 넘겨 보기';
+  b.classList.toggle('pri', !on);
+  if (on) AL.timer = setTimeout(albumTick, AL.ms);
+}
+
+$('albumPlay').onclick = () => albumPlay(!AL.playing);
+$('albumPrev').onclick = () => { albumPlay(false); albumShow(AL.i - 1); };
+$('albumNext').onclick = () => { albumPlay(false); albumShow(AL.i + 1); };
+$('albumSeek').oninput = (e) => { albumPlay(false); albumShow(+e.target.value); };
+$('albumSpeed').oninput = (e) => {
+  AL.ms = Math.round(parseFloat(e.target.value) * 1000);
+  $('albumSpeedLab').textContent = (AL.ms / 1000).toFixed(1) + '초';
+  // 넘기는 중이면 **곧바로** 새 빠르기로 바꾼다. 다음 장을 기다렸다 바꾸면,
+  // 5초에서 0.1초로 당겨 놓고도 5초를 멀뚱히 기다리게 된다.
+  if (AL.playing) { clearTimeout(AL.timer); AL.timer = setTimeout(albumTick, AL.ms); }
+};
 
 /* ── 둘만 아는 이야기로 본인 확인 ────────────────────────────────
    장군신이 이야기를 보고 예/아니오 질문 셋을 짓는다. 맞는 질문과 일부러
@@ -373,7 +497,7 @@ async function sendAnswers(token, answers) {
       S.person = j.person; S.candidate = null;
       $('dlgTitle').textContent = '🙌 알아뵈었소';
       $('dlgBody').innerHTML = `<p><b>${j.person.name}님</b>이 맞구려. 반갑소.</p>`;
-      showGreet(); prefill(); paint();
+      showGreet(); loadAlbum(); prefill(); paint();
       setTimeout(() => { $('dlg').close(); read(false); }, 1500);
     } else {
       $('dlgTitle').textContent = '🤫 둘만 아는 이야기';

@@ -495,6 +495,46 @@ def history(person_id, limit=5):
         return []
 
 
+def face_frames(person_id):
+    """그 사람의 얼굴 기록을 **오래된 것부터**. [{id, ts, quality}, ...]
+
+    사진 자체는 담아 주지 않는다. 한 사람에 여러 장이라 다 실으면 무거운데,
+    화면은 어차피 한 장씩 넘겨 보므로 목록과 사진을 나눠 내보내는 편이 낫다.
+    사진이 없는 줄(특징값만 있는 줄)은 넘겨 보아야 볼 것이 없으니 뺀다.
+
+    ⚠️ 오래된 것부터인 까닭 — 이 목록이 그대로 **넘겨 보는 차례**가 된다.
+    변화는 지난날에서 오늘로 흘러야 읽힌다.
+    """
+    if not person_id:
+        return []
+    try:
+        with _db() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT id, ts, quality FROM faces"
+                " WHERE person_id=? AND photo IS NOT NULL ORDER BY ts ASC",
+                (person_id,))]
+    except sqlite3.Error:
+        return []
+
+
+def face_photo(person_id, face_id):
+    """얼굴 사진 한 장(JPEG bytes) 또는 None.
+
+    ⚠️ **사진 번호만으로 꺼내 주지 않는다.** 누구의 것인지 함께 대조한다.
+    번호는 1부터 차례로 붙으므로, 번호만 보고 내주면 숫자를 하나씩 올려
+    보는 것만으로 남의 얼굴이 다 새어 나간다.
+    """
+    if not person_id or not face_id:
+        return None
+    try:
+        with _db() as c:
+            r = c.execute("SELECT photo FROM faces WHERE id=? AND person_id=?",
+                          (int(face_id), person_id)).fetchone()
+            return bytes(r["photo"]) if (r and r["photo"]) else None
+    except (sqlite3.Error, TypeError, ValueError):
+        return None
+
+
 def secret_note(person_id):
     """본인 확인용으로 남기신 이야기. 없으면 None.
 

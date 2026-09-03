@@ -35,7 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 
 import faceutil
 import leads
@@ -69,6 +69,10 @@ def _img_from(data_uri):
 
 def _b64png(blob):
     return "data:image/png;base64," + base64.b64encode(blob).decode()
+
+
+def _b64jpg(blob):
+    return "data:image/jpeg;base64," + base64.b64encode(blob).decode()
 
 
 def _parse_basic(text):
@@ -241,6 +245,9 @@ async def prepare(req: Request):
                                  "age": h.get("age"), "gender": h.get("gender"),
                                  "mood": h.get("mood"), "condition": h.get("condition")}
                                 for h in hist]})
+                        # 쌓인 얼굴이 있으면 넘겨 볼 표를 함께 끊어 드린다.
+                        if brief.get("faces"):
+                            p["album_token"] = _album_grant(pid)
                     else:
                         # ★ 확신이 없으면 **아무것도 알려 주지 않는다.**
                         #   전에는 "혹시 ○○님 아니시오?" 하고 이름을 그대로
@@ -252,6 +259,17 @@ async def prepare(req: Request):
                     res["person"] = p
                     print("[rec] pid=%s score=%.3f %s"
                           % (pid, score, "확신" if sure else "아리송"), flush=True)
+
+                # 낯이 익은 자리에서는 **오늘 얼굴도 함께** 뜬다. 넘겨 보는
+                # 마지막 장이 오늘이어야 "그동안"이 오늘에 닿기 때문이다.
+                # 이야기를 맞히고 나서야 열리는 길도 있어(그쪽은 사진을 다시
+                # 올리지 않는다) 여기서 미리 떠 둔다. 지난 장들과 **같은
+                # 길**(face_jpeg)을 지나야 넘길 때 얼굴이 튀지 않는다.
+                if res.get("person") or res.get("candidate"):
+                    try:
+                        res["face_today"] = _b64jpg(faceutil.face_jpeg(im))
+                    except Exception as e:
+                        print("[album] 오늘 얼굴 크롭 실패:", e, flush=True)
         except Exception as e:
             print("[rec] 실패:", e, flush=True)
     return res
@@ -615,6 +633,8 @@ async def verify_answer(req: Request):
             "days": brief.get("days_since_last"),
             "face_consent": bool(brief.get("face_consent")),
             "has_secret": bool(brief.get("has_secret")),
+            # 이야기로 맞히신 분에게도 그동안의 얼굴을 열어 드린다.
+            "album_token": _album_grant(pid) if brief.get("faces") else None,
             "email": (row or {}).get("email", ""),
             "phone": (row or {}).get("phone", ""),
             "history": [{"ts": (h.get("ts") or "")[:10], "age": h.get("age"),
@@ -627,6 +647,89 @@ async def verify_answer(req: Request):
     # 화면에 없는 길을 말로만 열어 두면 "그럼 어디서 다시 청하오?" 가 된다.
     return {"ok": False,
             "msg": "어긋나는 대목이 있구려. 새로 오신 손님으로 뵙겠소."}
+
+
+# ── ⑤ 그동안의 얼굴 — 한 자리에서 넘겨 본다 ─────────────────────────
+#
+# 쌓인 얼굴을 **한 틀 안에서 차례로 넘긴다.** 나란히 늘어놓는 것보다 겹쳐
+# 넘기는 편이 변화가 훨씬 잘 보인다 — 눈이 두 곳을 오가지 않고 한 자리만
+# 보므로, 달라진 데만 움직여 보인다. 사진마다 날짜를 밑에 적는다.
+#
+# ⚠️ **번호만으로는 아무것도 내주지 않는다.** `/api/album?person_id=8` 같은
+#    문을 두면 숫자를 하나씩 올려 보는 것만으로 남의 얼굴이 다 새어 나간다.
+#    얼굴로 확신했거나(sure) 둘만 아는 이야기를 맞히신 그 자리에서만
+#    **잠깐 쓰는 표**를 끊어 드리고, 그 표를 가진 분에게만 보여 드린다.
+#
+# ⚠️ 표는 서버 기억에만 둔다. 다시 띄우면 사라지는데, 그래도 된다 —
+#    얼굴을 다시 대면 그 자리에서 새로 끊긴다.
+
+_ALBUM = {}           # 표 = {토큰: {pid, exp}}
+ALBUM_TTL = 1800      # 30분. 감정서를 다 받고 천천히 넘겨 보실 참은 된다.
+
+
+def _album_grant(pid):
+    """그 사람의 얼굴을 볼 수 있는 표를 끊는다. 토큰 문자열."""
+    now = time.time()
+    for k in [k for k, v in _ALBUM.items() if v["exp"] < now]:
+        _ALBUM.pop(k, None)                 # 지난 표는 치운다
+    tok = base64.urlsafe_b64encode(os.urandom(18)).decode()
+    _ALBUM[tok] = {"pid": pid, "exp": now + ALBUM_TTL}
+    return tok
+
+
+def _album_pid(token):
+    """표에 적힌 사람. 없거나 시간이 지났으면 None."""
+    rec = _ALBUM.get(token or "")
+    if not rec:
+        return None
+    if rec["exp"] < time.time():
+        _ALBUM.pop(token, None)
+        return None
+    return rec["pid"]
+
+
+@app.get("/api/album")
+async def album(token: str = ""):
+    """넘겨 볼 얼굴의 **목록**. 사진은 한 장씩 따로 받아 간다.
+
+    한 번에 다 실어 보내면 여덟 장만 되어도 응답이 반 메가를 넘어, 감정서가
+    나오기도 전에 화면이 한참 멎는다. 목록은 가볍게 주고 사진은 따로 받는다.
+    """
+    pid = _album_pid(token)
+    if not pid:
+        return JSONResponse({"ok": False, "msg": "다시 얼굴을 보여 주시오."},
+                            status_code=403)
+    import datetime
+    frames, today = [], datetime.date.today()
+    for f in leads.face_frames(pid):
+        ts = f.get("ts") or ""
+        days = None
+        try:
+            d = datetime.date.fromisoformat(ts[:10])
+            days = (today - d).days
+        except ValueError:
+            pass
+        frames.append({"id": f["id"], "ts": ts[:10], "days": days})
+    b = leads.person_brief(pid) or {}
+    return {"ok": True, "name": b.get("name", ""), "frames": frames}
+
+
+@app.get("/api/album/frame")
+async def album_frame(token: str = "", id: int = 0):
+    """얼굴 사진 한 장. **표에 적힌 사람의 것만** 나간다.
+
+    `no-store` 로 못박는다. 앞단이나 브라우저 밑에 남으면, 표가 지난 뒤에도
+    누군가의 얼굴이 그 자리에 남아 있게 된다.
+    """
+    pid = _album_pid(token)
+    if not pid:
+        return JSONResponse({"ok": False}, status_code=403)
+    blob = leads.face_photo(pid, id)
+    if not blob:
+        return JSONResponse({"ok": False}, status_code=404)
+    from fastapi.responses import Response
+    return Response(blob, media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store, private"})
 
 
 @app.get("/api/notice")
