@@ -162,6 +162,29 @@
     <label class="chk"><input type="checkbox" id="keep">
       <span>얼굴과 이 감정서를 기억해 두시오. 다음에 오면 알아보고 그동안의 변화를 함께 살펴 주시오.
         <a href="#" id="lnkFaceNotice" style="color:var(--brand)">무엇을 담는지 보기</a></span></label>
+    <!-- ── 무엇을 드리는지 보여 준다 ─────────────────────────────
+         "기억해 두겠소" 를 말로만 하면 무엇을 얻는지 알 수 없다. 오늘 담길
+         얼굴을 그대로 보여 주고 옆에 빈 칸을 두어 다음 걸음을 그린다.
+         꾸며 낸 예시가 아니라 **오늘 본인의 얼굴**이라 설득이 된다.
+         이미 앨범이 있는 분에게는 띄우지 않는다(app.js 의 paintPeek). -->
+    <div id="keepPeek" class="peek hidden">
+      <div class="peekrow">
+        <figure class="peekcell">
+          <div class="pframe"><img id="peekToday" alt="오늘 담길 얼굴"></div>
+          <figcaption id="peekTodayCap">오늘</figcaption>
+        </figure>
+        <div class="peekjoin" aria-hidden="true">＋</div>
+        <figure class="peekcell">
+          <div class="pframe empty"><span>다음<br>걸음</span></div>
+          <figcaption>다음에 오시면</figcaption>
+        </figure>
+      </div>
+      <div class="hint peekcap">
+        지금은 한 장이오. 다음에 오시면 여기 한 장이 더 붙고,
+        <b>한 자리에 겹쳐 넘겨 가며</b> 그동안 무엇이 달라졌는지 함께 볼 수 있소.
+      </div>
+    </div>
+
     <div id="keepBox" class="hidden">
       <label class="f" for="secret">우리 둘만 아는 비밀 이야기는 다음에 당신을 알아보는 데 도움이 된다오. 한 가지 말해 주오</label>
       <input type="text" id="secret" maxlength="500" placeholder="예) 재작년 여름에 지리산에 다녀왔소">

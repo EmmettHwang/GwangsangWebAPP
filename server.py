@@ -35,7 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
-__version__ = "4.1.0"
+__version__ = "4.2.0"
 
 import faceutil
 import leads
@@ -362,7 +362,8 @@ def _stream_reading(im, told_age, told_gender, detailed, pid):
                             "elapsed": round(_el, 1),
                             "expect": round(expect, 1),
                             "pct": _pct(_el, expect),
-                            "tail": bag["text"][-160:].replace("\n", " ")})
+                            "tail": reading.mask_medical(
+                                bag["text"][-160:].replace("\n", " "))})
         time.sleep(1.0)
 
     th.join(timeout=5)
@@ -372,7 +373,16 @@ def _stream_reading(im, told_age, told_gender, detailed, pid):
     else:
         # 이번에 걸린 시간을 익혀 둔다. 다음 손님의 막대가 더 정확해진다.
         _pace_put(kind, took)
-        yield _sse("done", {"text": bag["resp"].text,
+        # ★ 의료 표현은 **사람 눈에 닿기 전에** 뺀다. 진행 중에는 끝 160자
+        #   미리보기만 나가므로, 여기서 거르면 전문은 한 번도 새지 않는다.
+        #   프롬프트로도 막고 있지만 지시는 보장이 아니다 — 한 번만 어겨도
+        #   그대로 메일로 나가고, 규제는 뜻을 봐 주지 않는다.
+        _clean, _dropped = reading.scrub_medical(bag["resp"].text)
+        if _dropped:
+            print("[MEDICAL] %d개 문장을 뺐다: %s"
+                  % (len(_dropped), " / ".join(d[:40] for d in _dropped[:3])),
+                  flush=True)
+        yield _sse("done", {"text": _clean,
                             "model": bag.get("model", ""),
                             "basic": bag["basic"] or {},
                             "elapsed": round(took, 1)})

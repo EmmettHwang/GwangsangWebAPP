@@ -661,6 +661,27 @@ function showBasic() {
   $('basicCard').classList.remove('hidden');
 }
 
+/* 「기록으로 남기기」 밑에 무엇을 드리는지 보여 준다.
+ *
+ * ⚠️ 이미 앨범이 있는 분에게는 띄우지 않는다 — 진짜를 보고 계신데 미리보기를
+ *    또 내밀면 군더더기다. 그래서 albumCard 가 떠 있으면 그만둔다.
+ * ⚠️ 오늘 얼굴이 아직 없으면(얼굴을 못 찾아 가운데를 잘랐거나 그리기 전이면)
+ *    띄우지 않는다. 빈 칸 둘만 보이면 오히려 무슨 소린지 모른다.
+ */
+function paintPeek() {
+  const box = $('keepPeek');
+  if (!box) return;
+  const hasAlbum = !$('albumCard').classList.contains('hidden');
+  const oval = $('imgOval').getAttribute('src') || '';
+  if (hasAlbum || !oval.startsWith('data:')) { box.classList.add('hidden'); return; }
+  $('peekToday').src = oval;
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  $('peekTodayCap').textContent =
+    `오늘 · ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  box.classList.remove('hidden');
+}
+
 function showReport() {
   $('reportTitle').textContent = '📜 아솔의 관상 풀이' + (S.detailed ? '' : '  (초벌)');
   $('report').innerHTML = md(S.report) +
@@ -669,6 +690,7 @@ function showReport() {
   // 초벌 자리에서는 기운·기록·연락처를 함께 펼쳐 둔다. 어차피 이어서 적을
   // 것들이라, 눌러야 나타나게 하면 한 걸음이 더 든다.
   $('formCard').classList.toggle('hidden', S.detailed);
+  paintPeek();
   // 전체 감정서가 나온 뒤에는 나이 고르개도 할 일이 끝났다. 그 값으로 이미
   // 다 보았으니 남겨 두면 "고치면 다시 보아 주나" 하고 손이 간다.
   $('ageCard').classList.toggle('hidden', S.detailed);

@@ -94,6 +94,8 @@ SHORT_FORM = """당신의 이름은 '아솔'입니다. 조선 팔도에서 가�
 - **굵게** 강조와 이모티콘을 적당히 쓰시오(과하지 않게).
 - 단점은 보완 가능한 점으로 부드럽게 표현하시오.
 - 분량을 넘기지 마시오. 짧고 인상적인 것이 이 맛보기의 목적이오.
+- **병이나 치료를 말하지 말고, 진단하지 마시오.** 아솔은 의원이 아니라
+  관상가요. 몸에 관한 이야기는 "기운", "결" 처럼 관상의 말로만 하시오.
 """
 
 
@@ -162,6 +164,75 @@ def past_note(brief, hist):
 """.format(name=brief.get("name", ""), n=(brief.get("visits") or 0) + 1,
            days=days if days is not None else "얼마",
            lines="\n".join(lines))
+
+
+# ── 의료 표현 거르개 ─────────────────────────────────────────────────
+#
+# 왜 코드로도 막는가: 프롬프트는 지시일 뿐 보장이 아니다. 모델이 한 번만 어겨도
+# 그대로 사람에게 가고 메일로 나간다. 의료기기·의료행위 규제는 "그럴 뜻이
+# 아니었다"를 봐 주지 않는다.
+#
+# 왜 문장째 빼는가: 낱말만 바꾸면 뜻이 비틀린다("치료" → "관리" 는 같은 말을
+# 다르게 적은 것일 뿐이다). 통째로 빼는 편이 정직하다.
+#
+# 왜 다시 짓지 않는가: 전체 감정서가 85초쯤 걸린다. 한 문장 때문에 손님을
+# 또 기다리게 할 수 없다.
+NO_MEDICAL_WORDS = ("치료", "질병", "병증", "진단", "처방", "투약", "의학", "환자")
+
+# "병" 한 글자는 넣지 않았다 — 병풍·병자년처럼 애먼 것이 걸린다.
+# 대신 위 낱말들이 실제 의료 맥락을 거의 다 잡는다.
+
+_SENT_END = ("다.", "오.", "소.", "요.", "라.", "까?", "오?", "!", "…")
+
+
+def _split_sentences(block):
+    """한국어 문장 나누기. 마침표만으로는 소수점·줄임표에서 어긋난다."""
+    out, buf = [], ""
+    for ch in block:
+        buf += ch
+        for e in _SENT_END:
+            if buf.endswith(e):
+                out.append(buf)
+                buf = ""
+                break
+    if buf:
+        out.append(buf)
+    return out
+
+
+def scrub_medical(text):
+    """의료 표현이 든 문장을 빼고 (걸러낸 글, 뺀 문장들) 을 돌려준다.
+
+    문단 구조는 지킨다 — 한 문단이 통째로 비면 그 문단도 없앤다.
+    """
+    if not text:
+        return text, []
+    dropped, paras = [], []
+    for para in text.split("\n"):
+        # 제목 줄(##, **…**)이나 짧은 줄은 문장 나누기를 하지 않는다.
+        if not para.strip() or para.lstrip().startswith("#"):
+            paras.append(para)
+            continue
+        keep = []
+        for s in _split_sentences(para):
+            if any(w in s for w in NO_MEDICAL_WORDS):
+                dropped.append(s.strip())
+            else:
+                keep.append(s)
+        joined = "".join(keep)
+        # 문단에 글이 남았을 때만 넣는다. 빈 줄만 남기면 사이가 벌어진다.
+        if joined.strip() or not para.strip():
+            paras.append(joined)
+    return "\n".join(paras), dropped
+
+
+def mask_medical(text):
+    """진행 막대의 미리보기(끝 160자)용. 문장을 나눌 수 없으니 낱말만 가린다."""
+    if not text:
+        return text
+    for w in NO_MEDICAL_WORDS:
+        text = text.replace(w, "…")
+    return text
 
 
 def build_prompt(gender_age_info, detailed=False):
@@ -282,4 +353,7 @@ PROMPT_FORM = """당신의 이름은 '아솔'입니다. 조선 팔도에서 가�
 8. 재미있고 읽기 쉽게, 하지만 충분히 전문적으로
 9. 사람들에게 희망과 용기를 주는 톤 유지
 10. 단점보다는 보완 가능한 점으로 부드럽게 표현
+11. **병이나 치료를 말하지 말고, 진단하지 마시오.** 아솔은 의원이 아니라
+    관상가요. 몸에 관한 이야기는 "기운", "결" 처럼 관상의 말로만 하고,
+    병명·증상·치료·처방·의학 소견을 입에 담지 마시오.
 """
