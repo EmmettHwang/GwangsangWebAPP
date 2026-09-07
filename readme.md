@@ -9,6 +9,8 @@
 - 배포: https://asoul.ssirn.co.kr (svr3, Cloudflare 터널)
 - AI 백엔드: **사내 LLM 서버** (OpenAI 호환 API, 비전 모델 `gemma3:27b`)
 - 판번호는 `server.py` 의 `__version__` **한 군데**에만 있다.
+  `/` 가 `index.html` 을 내보낼 때 `{{VERSION}}` 자리에 채워 넣는다 — v4.2.0 까지는
+  화면에 손으로 박아 두어 **판번호를 올려도 화면만 옛 것으로 남았다.**
   화면(`static/index.html` 의 `.ver`)과 이 문서가 그것을 따른다.
   `GET /healthz` 가 `{"ok":true,"version":"..."}` 로 알려 준다.
 

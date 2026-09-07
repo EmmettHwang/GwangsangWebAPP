@@ -770,6 +770,10 @@ async def index():
     html = io.open(p, encoding="utf-8").read()
     ver = str(int(max(os.path.getmtime(os.path.join(STATIC, f))
                       for f in ("app.js", "app.css"))))
+    # ★ 화면 판번호를 여기서 넣는다. 전에는 index.html 에 손으로 박혀 있어
+    #   v4.2.0 을 올렸는데 화면만 v4.1.0 으로 남았다(배포 뒤 확인에서 잡았다).
+    #   판번호가 두 군데면 언젠가 반드시 어긋난다.
+    html = html.replace("{{VERSION}}", __version__)
     html = (html.replace('href="/static/app.css"', 'href="/static/app.css?v=%s"' % ver)
                 .replace('src="/static/app.js"', 'src="/static/app.js?v=%s"' % ver))
     from fastapi.responses import HTMLResponse
