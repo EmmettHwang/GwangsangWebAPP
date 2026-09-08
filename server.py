@@ -29,10 +29,13 @@ import threading
 import time
 import traceback
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import (FileResponse, JSONResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+
+load_dotenv()
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
 __version__ = "4.2.0"

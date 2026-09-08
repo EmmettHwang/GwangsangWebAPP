@@ -58,11 +58,15 @@ class LLMResponse:
 
 
 def configure(base_url, api_key):
-    """앱 시작 시 1회 호출. base_url 은 .../v1 까지."""
-    if not base_url or not api_key:
-        raise LLMError("LLM_BASE_URL 과 LLM_API_KEY 가 모두 필요합니다.")
-    _config["base_url"] = base_url.rstrip("/")
-    _config["api_key"] = api_key
+    """앱 시작 시 1회 호출. base_url 은 .../v1 까지.
+
+    로컬 개발에서는 실제 백엔드가 아직 없을 수 있으므로 빈 값이어도
+    부팅을 허용한다. 실제 LLM 요청이 들어갈 때만 오류를 내보낸다.
+    """
+    _config["base_url"] = (base_url or "").rstrip("/")
+    _config["api_key"] = api_key or ""
+    if not _config["base_url"] or not _config["api_key"]:
+        print("[LLM] LLM_BASE_URL / LLM_API_KEY 가 비어 있어 로컬 개발 모드로 동작합니다.", flush=True)
 
 
 def _headers():
