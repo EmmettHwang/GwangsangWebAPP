@@ -309,3 +309,4 @@ dialog.work::backdrop { background: rgba(45,32,30,.62); }
 .foot a { color: var(--ink-soft); }
 .sw input:disabled + i { opacity: .45; }
 .sw:has(input:disabled) { cursor: default; color: var(--muted); }
+#consentCard a, dialog a { color: var(--brand); }
