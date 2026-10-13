@@ -166,8 +166,11 @@ chk("버튼을 누르시면" in leads.NOTICE, "★ 버튼 = 동의 방식에 맞
 chk("화면으로만 보기" not in leads.NOTICE, "★ 없어진 버튼을 더 가리키지 않는다")
 chk("그냥 나가셔도" in leads.NOTICE, "안 남기고 나갈 수 있다고 알린다")
 chk("적지 않으셔도" in leads.NOTICE, "★ 전화번호는 선택이라고 알린다")
-chk("얼굴 사진" not in leads.NOTICE and "얼굴 사진" in leads.FACE_NOTICE,
+# v4.3.0 — 메일에 얼굴 사진이 실려 SendGrid(미국)로 나가는 것은 사실이므로
+# NOTICE 에도 적는다. 지키려던 뜻은 «사진 **보관**은 선택 쪽에만» 이다.
+chk("남기지 않습니다" in leads.NOTICE and "얼굴 사진" in leads.FACE_NOTICE,
     "★ 사진 보관은 필수가 아니라 선택 쪽에 있다")
+chk("SendGrid" in leads.NOTICE and "미국" in leads.NOTICE, "★ 메일 발송 국외 이전 고지")
 chk("마지막 방문일" in leads.NOTICE and "마지막 방문일" in leads.FACE_NOTICE,
     "★ 보유기간 문구가 코드(_purge)와 같은 기준")
 chk("기분" in leads.FACE_NOTICE and "컨디션" in leads.FACE_NOTICE, "기분·컨디션도 선택 동의에 고지")

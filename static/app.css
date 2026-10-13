@@ -276,3 +276,36 @@ dialog.work::backdrop { background: rgba(45,32,30,.62); }
 }
 .wtail::after { content: "▌"; opacity: .45; }
 .whint { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+
+/* ── 시작하기 전에 — 동의 ─────────────────────────────── */
+#consentCard { border: 1.5px solid var(--brand-dim); }
+.citem { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.citem .chk { flex: 1; min-width: 0; }
+.citem button { flex: none; }
+.req { color: #b4442f; }
+.cstate { font-size: 12.5px; color: var(--muted); margin: 2px 0 0 30px; }
+.cstate.ok { color: var(--ok); }
+.ctext {
+  max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px;
+  padding: 4px 10px; background: #fcfaf8; -webkit-overflow-scrolling: touch;
+}
+.ctext table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.7; }
+.ctext th, .ctext td { text-align: left; vertical-align: top; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.ctext tr:last-child th, .ctext tr:last-child td { border-bottom: none; }
+.ctext th { width: 6.2em; color: var(--ink-soft); font-weight: 700; white-space: nowrap; }
+.ctext .end { text-align: center; color: var(--muted); font-size: 12.5px; padding: 10px 0 6px; }
+.cread { font-size: 12.5px; color: var(--warn); margin: 8px 0 0; }
+.cread.ok { color: var(--ok); }
+.cbtns { display: flex; gap: 8px; margin-top: 12px; }
+.cbtns button { flex: 1; }
+.cbtns button.pri { flex: 1.5; }
+@media (max-width: 400px) {
+  .ctext th { display: block; width: auto; border-bottom: none; padding-bottom: 0; }
+  .ctext td { display: block; padding-top: 2px; }
+}
+
+/* ── 바닥글 ────────────────────────────────────────── */
+.foot { text-align: center; font-size: 12.5px; color: var(--muted); line-height: 1.9; margin: 18px 0 8px; word-break: keep-all; }
+.foot a { color: var(--ink-soft); }
+.sw input:disabled + i { opacity: .45; }
+.sw:has(input:disabled) { cursor: default; color: var(--muted); }

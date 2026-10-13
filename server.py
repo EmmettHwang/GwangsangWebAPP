@@ -38,8 +38,9 @@ from PIL import Image
 load_dotenv()
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
-__version__ = "4.2.0"
+__version__ = "4.3.0"
 
+import consent
 import faceutil
 import leads
 import llm_client
@@ -60,6 +61,12 @@ def _boot():
                          api_key=os.environ.get("LLM_API_KEY", ""))
     n = leads.init()
     print("[boot] 준비 완료. 지난 기록 %s 줄 정리." % n, flush=True)
+    try:
+        k = consent.purge()
+        if k:
+            print("[consent] 보유 기간이 지난 동의 기록 %d 줄을 지웠다." % k, flush=True)
+    except Exception as e:
+        print("[consent] 정리 실패:", e, flush=True)
 
 
 # ── 도우미 ────────────────────────────────────────────────────────────
@@ -109,6 +116,20 @@ def _parse_basic(text):
         elif "어울리" in k or "추천" in k:
             out["suitable_jobs"] = [s.strip() for s in v.split(",") if s.strip()][:4]
     return out
+
+
+def _need_consent(req):
+    """필수 동의(만 14세 이상 · 얼굴 사진 처리)가 없으면 403 을 돌려준다.
+
+    ★ 사진을 **읽기 전에** 본다. 화면이 막고 있더라도 여기서 한 번 더 막는다 —
+      화면 코드가 바뀌거나 누가 직접 요청을 보내도 이 규칙은 남아야 한다.
+    """
+    st = consent.state(req)
+    if st["ok"]:
+        return None, st
+    return JSONResponse({"error": "사진을 받기 전에 동의가 필요하오. "
+                                  "화면 위의 [필수] 두 항목에 동의해 주시오.",
+                         "need_consent": True}, status_code=403), st
 
 
 def _sse(event, data):
@@ -188,6 +209,9 @@ async def prepare(req: Request):
     ⚠️ 얼굴 특징값은 **알아보게 해 달라 하신 때에만** 만든다. 만들어 두고
     쓰지 않는 것과, 아예 만들지 않는 것은 다르다. 만든 값은 저장하지 않는다.
     """
+    deny, st = _need_consent(req)
+    if deny:
+        return deny
     body = await req.json()
     try:
         im, _raw = _img_from(body.get("image"))
@@ -209,7 +233,9 @@ async def prepare(req: Request):
     except Exception:
         res["quality"] = 0.0
 
-    if body.get("recognize"):
+    # 얼굴 특징값 대조는 **선택 동의(rec)** 를 받은 때에만. 화면 스위치가
+    # 켜져 있어도(주소줄 rec=1) 동의 기록이 없으면 하지 않는다.
+    if body.get("recognize") and st.get("rec"):
         try:
             vec = faceutil.embed(im)
             if vec is not None:
@@ -393,6 +419,9 @@ def _stream_reading(im, told_age, told_gender, detailed, pid):
 
 @app.post("/api/read")
 async def read(req: Request):
+    deny, _st = _need_consent(req)
+    if deny:
+        return deny
     body = await req.json()
     try:
         im, _ = _img_from(body.get("image"))
@@ -411,6 +440,10 @@ async def read(req: Request):
 
 @app.post("/api/finish")
 async def finish(req: Request):
+    deny, _st = _need_consent(req)
+    if deny:
+        return {"ok": False, "need_consent": True,
+                "msg": "동의가 풀렸소(하루가 지났거나 철회하셨소). 화면 위에서 다시 동의해 주시오."}
     body = await req.json()
     name = (body.get("name") or "").strip()
     email = (body.get("email") or "").strip()
@@ -588,6 +621,11 @@ def _make_questions(note, image, pid=None):
 
 @app.post("/api/verify/start")
 async def verify_start(req: Request):
+    deny, st = _need_consent(req)
+    if deny:
+        return {"ok": False, "msg": "동의가 풀렸소. 화면 위에서 다시 동의해 주시오."}
+    if not st.get("rec"):
+        return {"ok": False, "msg": "얼굴로 알아보기에 동의하지 않으셨소."}
     body = await req.json()
     pid = body.get("person_id")
     if not pid:
@@ -751,6 +789,105 @@ async def notice():
     한 곳만 고치면 되고, leads 가 실제로 지키는 규칙과 어긋날 일이 없다."""
     return {"notice": leads.NOTICE, "face": leads.FACE_NOTICE,
             "no_medical": getattr(leads, "NO_MEDICAL", "")}
+
+
+# ── ⑥ 동의 ─────────────────────────────────────────────────────────
+#
+# 사진을 받기 전에 묻는다. 확인표는 서명한 쿠키(HttpOnly)라 화면 스크립트가
+# 꾸며 낼 수 없고, 서버를 다시 띄워도 쓰던 분이 막히지 않는다.
+
+def _set_cookie(resp, req, tok):
+    https = (req.headers.get("x-forwarded-proto", "") == "https"
+             or req.url.scheme == "https")
+    resp.set_cookie(consent.COOKIE, tok, max_age=consent.MAX_AGE, httponly=True,
+                    secure=https, samesite="lax", path="/")
+
+
+@app.get("/api/consent")
+async def consent_get(req: Request):
+    st = consent.state(req)
+    out = consent.terms()
+    out.update({"agreed": st["ok"], "rec": st["rec"]})
+    return JSONResponse(out, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/consent")
+async def consent_post(req: Request):
+    """동의를 받는다. body = {"items": {"age14":true,"photo":true,"rec":false},
+                              "read_full": ["photo"]}
+
+    필수 항목이 빠지면 무엇이 빠졌는지 말해 준다. 전문을 열어 끝까지 읽어야
+    하는 항목(read_required)은 화면이 그 사실을 함께 보낸다.
+    선택 동의(rec)만 더할 때도 이 길을 쓴다 — 필수 둘을 함께 다시 보낸다.
+    """
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    items = {k for k, v in (body.get("items") or {}).items() if v is True}
+    read = {k for k in (body.get("read_full") or []) if isinstance(k, str)}
+    terms_ = {t["key"]: t for t in consent.terms()["items"]}
+    old = consent.state(req)
+    if old["ok"]:
+        # 이미 필수 동의가 있는 분이 선택 동의만 더하는 경우
+        items |= set(consent.REQUIRED)
+        read |= {"photo"}
+    missing = [terms_[k]["label"] for k in consent.REQUIRED if k not in items]
+    unread = [terms_[k]["label"] for k in items
+              if k in terms_ and terms_[k]["read_required"] and k not in read]
+    if missing or unread:
+        msg = []
+        if missing:
+            msg.append("동의가 빠졌소: " + ", ".join(missing))
+        if unread:
+            msg.append("전문을 끝까지 읽지 않으셨소: " + ", ".join(unread))
+        return JSONResponse({"ok": False, "msg": " / ".join(msg)}, status_code=400)
+    items &= set(consent.REQUIRED + consent.OPTIONAL)
+    cid = old["cid"] or consent.new_cid()
+    consent.log("agree", cid, items, read & items)
+    resp = JSONResponse({"ok": True, "version": consent.VERSION,
+                         "agreed": True, "rec": "rec" in items})
+    _set_cookie(resp, req, consent.make_token(cid, items))
+    print("[consent] 동의 cid=%s %s" % (cid, ",".join(sorted(items))), flush=True)
+    return resp
+
+
+@app.post("/api/consent/withdraw")
+async def consent_withdraw(req: Request):
+    """동의 철회. what="rec" 이면 선택 동의만, 아니면 전부 거둔다."""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    st = consent.state(req)
+    cid = st["cid"] or consent.new_cid()
+    if body.get("what") == "rec" and st["ok"]:
+        consent.log("withdraw", cid, ["rec"])
+        resp = JSONResponse({"ok": True, "agreed": True, "rec": False})
+        _set_cookie(resp, req, consent.make_token(cid, consent.REQUIRED))
+        return resp
+    consent.log("withdraw", cid, list(consent.REQUIRED + consent.OPTIONAL))
+    resp = JSONResponse({"ok": True, "agreed": False, "rec": False})
+    resp.delete_cookie(consent.COOKIE, path="/")
+    print("[consent] 철회 cid=%s" % cid, flush=True)
+    return resp
+
+
+def _page(name):
+    from fastapi.responses import HTMLResponse
+    html = io.open(os.path.join(STATIC, name), encoding="utf-8").read()
+    html = html.replace("{{VERSION}}", __version__)
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/privacy")
+async def privacy_page():
+    return _page("privacy.html")
+
+
+@app.get("/terms")
+async def terms_page():
+    return _page("terms.html")
 
 
 @app.get("/healthz")

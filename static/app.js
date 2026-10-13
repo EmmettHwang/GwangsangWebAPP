@@ -35,9 +35,23 @@ function saveWant() {
   history.replaceState(null, '', u);
 }
 $('swAuto').checked = want.auto;
-$('swRec').checked = want.rec;
+$('swRec').checked = false;          // 선택 동의를 확인한 뒤에 켠다(applyConsent)
 $('swAuto').onchange = (e) => { want.auto = e.target.checked; saveWant(); if (want.auto) startCam(); };
-$('swRec').onchange = (e) => { want.rec = e.target.checked; saveWant(); if (S.image) prepare(); };
+$('swRec').onchange = (e) => {
+  // 얼굴 특징값 대조는 **선택 동의**다. 동의 기록이 없으면 스위치를 되돌리고
+  // 전문부터 보여 드린다. 끌 때는 동의도 함께 거둔다.
+  if (e.target.checked && !C.rec) {
+    e.target.checked = false;
+    askRec();
+    return;
+  }
+  if (!e.target.checked && C.rec) {
+    fetch('/api/consent/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ what: 'rec' }) }).catch(() => {});
+    C.rec = false;
+  }
+  want.rec = e.target.checked; saveWant(); if (S.image) prepare();
+};
 
 /* ── 모달 ──────────────────────────────────────────────────── */
 function modal(title, html) {
@@ -46,6 +60,205 @@ function modal(title, html) {
   $('dlg').showModal();
 }
 $('dlgClose').onclick = () => $('dlg').close();
+
+/* ── 동의 — 사진을 받기 전에 ────────────────────────────────────
+ *
+ * 필수 둘(얼굴 사진 처리 · 만 14세 이상)이 있어야 카메라·앨범이 열린다.
+ * 「얼굴 사진 처리」는 **전문을 끝까지 내려 읽어야** [동의합니다] 가 켜지고,
+ * 그 단추로만 체크된다. 체크 상자를 바로 누르면 전문이 먼저 열린다.
+ *
+ * 서버도 따로 막는다(동의 확인표가 없으면 사진을 읽지 않고 403). 여기서
+ * 막는 것은 손님이 헤매지 않게 하려는 것이지, 이것만 믿는 것이 아니다.
+ *
+ * 상태를 **받아 온 뒤에 한 번만** 그린다. 동의 칸을 먼저 그려 두었다가
+ * 이미 동의하신 분이라 걷어 내면, 들어올 때마다 칸이 번쩍였다 사라진다.
+ */
+const C = { agreed: false, rec: false, terms: null, read: new Set() };
+
+function termHTML(it) {
+  return `<div class="ctext" id="ctext"><table>${it.rows.map(r =>
+    `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('')}</table>
+    <div class="end">— 끝 · 문안 판 ${C.terms.version} —</div></div>`;
+}
+
+/* 전문을 띄우고, 끝까지 읽으면 [동의합니다] 를 켠다. 동의하면 resolve(true). */
+function readTerm(key) {
+  const it = C.terms && C.terms.items.find(x => x.key === key);
+  if (!it) return Promise.resolve(false);
+  return new Promise((done) => {
+    const need = !!it.read_required;
+    modal(it.title, `${termHTML(it)}
+      ${need ? '<div class="cread" id="cread">⬇️ 끝까지 내려 읽으시면 [동의합니다] 가 켜지오.</div>' : ''}
+      <div class="cbtns">
+        <button id="cno">닫기</button>
+        <button class="pri" id="cyes" ${need ? 'disabled' : ''}>동의합니다</button>
+      </div>`);
+    const box = $('ctext'), yes = $('cyes');
+    let settled = false;
+    const finish = (v) => { if (settled) return; settled = true; done(v); };
+    const check = () => {
+      if (box.scrollHeight - box.clientHeight - box.scrollTop <= 6) {
+        yes.disabled = false;
+        const h = $('cread');
+        if (h) { h.textContent = '✅ 끝까지 읽으셨소.'; h.classList.add('ok'); }
+        C.read.add(key);
+      }
+    };
+    if (need) {
+      box.addEventListener('scroll', check, { passive: true });
+      requestAnimationFrame(check);           // 화면이 넉넉해 내릴 것이 없으면 바로 켠다
+    }
+    yes.onclick = () => { if (!need) C.read.add(key); $('dlg').close(); finish(true); };
+    $('cno').onclick = () => { $('dlg').close(); finish(false); };
+    $('dlg').addEventListener('close', () => finish(false), { once: true });
+  });
+}
+
+function paintConsentForm() {
+  const photoOk = $('cPhoto').checked, ageOk = $('cAge').checked;
+  $('cGo').disabled = !(photoOk && ageOk);
+  const st = $('cPhotoState');
+  st.textContent = photoOk ? '✅ 전문을 끝까지 읽고 동의하셨소.'
+                           : '전문을 끝까지 읽고 [동의합니다] 를 누르시면 체크되오.';
+  st.classList.toggle('ok', photoOk);
+}
+$('cPhoto').addEventListener('click', async (e) => {
+  if (!$('cPhoto').checked) { paintConsentForm(); return; }   // 거두는 것은 바로
+  e.preventDefault();                                          // 읽기 전에는 체크되지 않는다
+  const ok = await readTerm('photo');
+  $('cPhoto').checked = ok;
+  paintConsentForm();
+});
+$('cPhotoRead').onclick = async () => {
+  const ok = await readTerm('photo');
+  if (ok) $('cPhoto').checked = true;
+  paintConsentForm();
+};
+$('cAgeRead').onclick = async () => {
+  const ok = await readTerm('age14');
+  if (ok) $('cAge').checked = true;
+  paintConsentForm();
+};
+$('cAge').onchange = paintConsentForm;
+
+$('cGo').onclick = async () => {
+  $('cGo').disabled = true;
+  $('cMsg').innerHTML = '';
+  try {
+    const r = await fetch('/api/consent', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: { photo: $('cPhoto').checked, age14: $('cAge').checked },
+                             read_full: [...C.read] }),
+    });
+    let j = {}; try { j = await r.json(); } catch (_) { }
+    if (!r.ok || !j.ok) {
+      $('cMsg').innerHTML = `<div class="note">동의를 받지 못했소 — ${j.msg || ('서버가 ' + r.status + ' 로 답했소')}</div>`;
+      paintConsentForm();
+      return;
+    }
+    applyConsent({ agreed: true, rec: !!j.rec });
+    modal('✅ 고맙소', `<p>동의를 받았소. 이제 <b>📸 지금 찍기</b> 나 <b>📂 앨범에서</b> 로 얼굴을 담으시오.</p>
+      <p class="hint">동의는 하루 동안 이 브라우저에 남고, 화면 맨 아래 <b>동의 철회</b> 로 언제든 거두실 수 있소.</p>
+      <div class="cbtns"><button class="pri" id="cOk">시작하기</button></div>`);
+    $('cOk').onclick = () => { $('dlg').close(); scrollTo2($('camCard')); };
+  } catch (e) {
+    $('cMsg').innerHTML = `<div class="note">동의를 보내지 못했소 — 연결이 끊긴 듯하오. 잠시 뒤 다시 누르시오. (${e})</div>`;
+    paintConsentForm();
+  }
+};
+
+/* 「다시 온 사람 알아보기」 — 선택 동의 */
+async function askRec() {
+  const ok = await readTerm('rec');
+  if (!ok) return;
+  try {
+    const r = await fetch('/api/consent', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: { rec: true }, read_full: [...C.read] }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { modal('동의를 받지 못했소', `<p>${j.msg || r.status}</p>`); return; }
+    C.rec = true;
+    $('swRec').checked = true; want.rec = true; saveWant();
+    if (S.image) prepare();
+  } catch (e) {
+    modal('동의를 받지 못했소', `<p>연결이 끊긴 듯하오. 잠시 뒤 다시 켜 보시오. (${e})</p>`);
+  }
+}
+
+$('lnkWithdraw').onclick = (e) => {
+  e.preventDefault();
+  modal('동의를 거두시겠소?', `
+    <p>거두시면 아래가 함께 일어나오.</p>
+    <ul style="margin:6px 0 0 -8px">
+      <li><b>얼굴 사진 처리 · 만 14세 확인${C.rec ? ' · 얼굴로 알아보기' : ''}</b> 동의가 풀리고, 서버는 사진을 더 받지 않소.</li>
+      <li>지금 화면에 있는 사진과 감정서가 사라지고 첫 화면으로 돌아가오. (서버에는 처음부터 남기지 않았소.)</li>
+      <li>「기록으로 남기기」로 맡기신 얼굴·기록은 이것과 따로요. 지우시려면 다음에 오셔서 그 체크를 거두시거나
+          <a href="mailto:dhhwang@wsu.ac.kr">dhhwang@wsu.ac.kr</a> 로 청하시오.</li>
+    </ul>
+    <div class="cbtns"><button id="wNo">그대로 두기</button><button class="pri" id="wYes">동의 거두기</button></div>`);
+  $('wNo').onclick = () => $('dlg').close();
+  $('wYes').onclick = async () => {
+    $('wYes').disabled = true;
+    try {
+      const r = await fetch('/api/consent/withdraw', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!r.ok) throw new Error('서버가 ' + r.status + ' 로 답했소');
+      want.rec = false; saveWant();
+      reset();
+    } catch (err) {
+      $('dlgBody').insertAdjacentHTML('beforeend', `<div class="note">거두지 못했소 — ${err.message || err}</div>`);
+      $('wYes').disabled = false;
+    }
+  };
+};
+
+/* 동의 상태대로 화면을 한 번 그린다. */
+function applyConsent(st) {
+  C.agreed = !!st.agreed; C.rec = !!st.rec;
+  $('consentCard').classList.toggle('hidden', C.agreed);
+  $('camCard').classList.toggle('hidden', !C.agreed || !!S.image);
+  $('btnPick').disabled = !C.agreed;
+  $('swAuto').disabled = !C.agreed;
+  $('swRec').disabled = !C.agreed;
+  $('swRec').checked = C.agreed && C.rec && want.rec;
+  $('footWithdraw').classList.toggle('hidden', !C.agreed);
+  if (!C.agreed) { stopCam(); $('cPhoto').checked = false; $('cAge').checked = false; paintConsentForm(); }
+  paint();
+  if (C.agreed && want.auto && detector) startCam();
+  if (C.agreed && !want.auto) say('아래 [지금 찍기] 를 누르시오.', '자동으로 찍히길 원하시면 위에서 켜시오.');
+}
+
+/* 서버가 「동의가 없다」(403) 고 하면 — 하루가 지났거나 다른 창에서 거두셨다. */
+function consentLost() {
+  applyConsent({ agreed: false, rec: false });
+  modal('🔐 다시 여쭙겠소', `<p>동의가 풀렸소(하루가 지났거나 철회하셨소). 화면 위에서 다시 동의해 주시면
+    이어서 보아 드리리다.</p><div class="cbtns"><button class="pri" id="cAgain">동의하러 가기</button></div>`);
+  $('cAgain').onclick = () => { $('dlg').close(); scrollTo2($('consentCard')); };
+}
+
+async function loadConsent() {
+  // 받아 오지 못하면 **막힌 쪽**으로 둔다(동의 칸을 보이고 단추는 끈다).
+  const guard = setTimeout(() => {
+    if (!C.terms) {
+      $('consentCard').classList.remove('hidden');
+      $('cMsg').innerHTML = '<div class="note">동의 안내를 불러오는 중이오… 오래 걸리면 새로고침하시오.</div>';
+    }
+  }, 1500);
+  try {
+    const r = await fetch('/api/consent', { cache: 'no-store' });
+    const j = await r.json();
+    C.terms = j;
+    clearTimeout(guard);
+    $('cMsg').innerHTML = '';
+    applyConsent({ agreed: j.agreed, rec: j.rec });
+  } catch (e) {
+    clearTimeout(guard);
+    $('consentCard').classList.remove('hidden');
+    $('cGo').disabled = true;
+    $('cMsg').innerHTML = `<div class="note">동의 안내를 불러오지 못했소 — 연결을 확인하고 새로고침하시오. (${e})</div>`;
+  }
+}
 
 $('btnAbout').onclick = () => modal('🧙‍♂️ 웰니스 관상 ‘아솔’', `
 <p><b>조선 팔도를 떠돌며 수많은 관상을 봐온 아솔이, 얼굴을 기억하고 안부를 묻소.</b></p>
@@ -118,11 +331,11 @@ const say = (m, s) => { $('camMsg').textContent = m; $('camSub').textContent = s
   } catch (e) {
     console.warn('[cam] 자동 인식 준비 실패', e);
   }
-  if (want.auto) startCam();
+  if (want.auto && C.agreed) startCam();
 })();
 
 async function startCam() {
-  if (stream) return;
+  if (stream || !C.agreed) return;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
@@ -188,7 +401,7 @@ function loop() {
 }
 
 function shoot() {
-  if (shooting || !stream) return;
+  if (shooting || !stream || !C.agreed) return;
   shooting = true;
   const c = document.createElement('canvas');
   c.width = v.videoWidth; c.height = v.videoHeight;
@@ -201,10 +414,11 @@ function shoot() {
 $('btnShoot').onclick = shoot;
 
 /* 앨범에서 고르기 */
-$('btnPick').onclick = () => $('file').click();
+$('btnPick').onclick = () => { if (C.agreed) $('file').click(); };
 $('file').onchange = (e) => {
   const f = e.target.files && e.target.files[0];
-  if (!f) return;
+  e.target.value = '';      // 같은 사진을 다시 골라도 change 가 다시 오도록
+  if (!f || !C.agreed) return;
   const rd = new FileReader();
   rd.onload = () => { S.image = rd.result; stopCam(); $('camCard').classList.add('hidden'); prepare(); };
   rd.readAsDataURL(f);
@@ -219,9 +433,10 @@ async function prepare() {
   try {
     const r = await fetch('/api/prepare', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: S.image, recognize: want.rec }),
+      body: JSON.stringify({ image: S.image, recognize: want.rec && C.rec }),
     });
     const j = await r.json();
+    if (j.need_consent) { $('faceNote').innerHTML = `<div class="note">${j.error}</div>`; consentLost(); return; }
     if (j.error) { $('faceNote').innerHTML = `<div class="note">${j.error}</div>`; return; }
     $('imgOval').src = j.oval; $('imgMesh').src = j.mesh;
     let n = '';
@@ -564,6 +779,12 @@ async function read(detailed) {
         person_id: (S.person && (S.person.sure || S.person.confirmed)) ? S.person.id : null,
       }),
     });
+    if (r.status === 403) {
+      S.busy = false;
+      if ($('workDlg').open) $('workDlg').close();
+      consentLost();
+      return;
+    }
     const rd = r.body.getReader(), dec = new TextDecoder();
     let buf = '';
     for (;;) {
@@ -774,6 +995,7 @@ async function finish() {
       body: JSON.stringify(body),
     });
     const j = await r.json();
+    if (j.need_consent) { $('mailMsg').innerHTML = `<div class="note">📪 보내지 못했소 — ${j.msg}</div>`; consentLost(); return; }
     $('mailMsg').innerHTML = j.ok
       ? `<div class="good">📬 <b>${$('em').value}</b> 로 감정서를 보냈소.<br>
          <span style="font-size:13px;color:#5d4f4f">받은편지함에 없거든 스팸함도 살펴보시오.</span></div>`
@@ -798,7 +1020,9 @@ async function finish() {
 function paint() {
   const bar = $('actions');
   const B = [];
-  if (!S.image) {
+  if (!C.agreed) {
+    B.push(['🔐 위에서 동의하고 시작하기', 'pri', () => scrollTo2($('consentCard')), false]);
+  } else if (!S.image) {
     B.push(['📸 지금 찍기', 'pri', () => (stream ? shoot() : startCam()), !detector && !stream ? false : false]);
     B.push(['📂 앨범에서', '', () => $('file').click(), false]);
   } else if (!S.report) {
@@ -850,4 +1074,4 @@ function scrollTo2(el) {
 }
 
 paint();
-if (!want.auto) say('아래 [지금 찍기] 를 누르시오.', '자동으로 찍히길 원하시면 위에서 켜시오.');
+loadConsent();

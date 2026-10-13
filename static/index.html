@@ -24,13 +24,46 @@
       <div class="tag">얼굴을 기억하고 안부를 묻는 관상가</div>
       <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="sm" id="btnAbout">ℹ️ 소개</button>
-        <button class="sm" id="btnPick">📂 앨범에서 고르기</button>
+        <button class="sm" id="btnPick" disabled>📂 앨범에서 고르기</button>
         <input type="file" id="file" accept="image/*" class="hidden">
       </div>
     </div>
     <div class="right">
-      <label class="sw"><input type="checkbox" id="swAuto"><i></i>⏱️ 자동으로 찍기</label>
-      <label class="sw"><input type="checkbox" id="swRec"><i></i>🔁 다시 온 사람 알아보기</label>
+      <label class="sw"><input type="checkbox" id="swAuto" disabled><i></i>⏱️ 자동으로 찍기</label>
+      <label class="sw"><input type="checkbox" id="swRec" disabled><i></i>🔁 다시 온 사람 알아보기</label>
+    </div>
+  </div>
+
+  <!-- ── 시작하기 전에 — 동의 ───────────────────────────
+       사진을 받기 **전에** 묻는다. 동의 전에는 카메라 칸이 아예 없고
+       앨범 단추·스위치도 꺼져 있다. 서버도 동의 확인표가 없으면 사진을
+       읽지 않는다(server._need_consent). 동의 상태를 받아 온 뒤에 한 번만
+       그린다 — 동의 칸이 보였다가 사라지는 깜빡임을 막으려고. -->
+  <div class="card hidden" id="consentCard">
+    <h2 class="sec">🔐 시작하기 전에 여쭙겠소</h2>
+    <p class="hint" style="margin-bottom:10px">사진은 <b>저장하지 않고</b>, 운영자가 직접 돌리는
+      <b>국내 서버</b>에서만 읽소. 외부 AI 회사로 보내지 않소.
+      아래 두 가지에 동의하셔야 카메라와 앨범이 열리오.</p>
+
+    <div class="citem">
+      <label class="chk" for="cPhoto"><input type="checkbox" id="cPhoto">
+        <span><b class="req">[필수]</b> 얼굴 사진 처리 동의</span></label>
+      <button class="sm" id="cPhotoRead">전문 읽기</button>
+    </div>
+    <div class="cstate" id="cPhotoState">전문을 끝까지 읽고 [동의합니다] 를 누르시면 체크되오.</div>
+
+    <div class="citem">
+      <label class="chk" for="cAge"><input type="checkbox" id="cAge">
+        <span><b class="req">[필수]</b> 만 14세 이상입니다</span></label>
+      <button class="sm" id="cAgeRead">왜 묻나</button>
+    </div>
+
+    <button class="pri wide" id="cGo" disabled style="margin-top:14px">동의하고 시작하기</button>
+    <div id="cMsg"></div>
+    <div class="hint" style="margin-top:10px">
+      <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
+      <a href="/terms" target="_blank" rel="noopener">이용약관</a> ·
+      동의하지 않으시면 이 서비스를 쓰실 수 없을 뿐, 다른 불이익은 없소.
     </div>
   </div>
 
@@ -38,7 +71,7 @@
   <div id="greet" class="hidden"></div>
 
   <!-- ── 카메라 ────────────────────────────────────── -->
-  <div class="card" id="camCard">
+  <div class="card hidden" id="camCard">
     <div id="stage">
       <video id="v" playsinline muted autoplay></video>
       <canvas id="ov" class="ov"></canvas>
@@ -208,6 +241,15 @@
     </div>
     <div id="formMsg"></div>
   </div>
+
+  <!-- ── 바닥글 — 처리방침·약관은 언제든 닿아야 한다 ─────── -->
+  <footer class="foot">
+    <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
+    <a href="/terms" target="_blank" rel="noopener">이용약관</a>
+    <span id="footWithdraw" class="hidden"> · <a href="#" id="lnkWithdraw">동의 철회</a></span>
+    <br>운영 지기술(G-TECH) · 개인정보 보호책임자 황동하 교수 ·
+    <a href="mailto:dhhwang@wsu.ac.kr">dhhwang@wsu.ac.kr</a>
+  </footer>
 
 </div>
 
