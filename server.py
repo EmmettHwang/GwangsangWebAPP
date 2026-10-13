@@ -38,7 +38,7 @@ from PIL import Image
 load_dotenv()
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
-__version__ = "4.3.0"
+__version__ = "4.4.0"
 
 import consent
 import faceutil
@@ -445,6 +445,18 @@ async def finish(req: Request):
         return {"ok": False, "need_consent": True,
                 "msg": "동의가 풀렸소(하루가 지났거나 철회하셨소). 화면 위에서 다시 동의해 주시오."}
     body = await req.json()
+    # ★ 메일에는 얼굴 사진이 실려 SendGrid(미국)로 나간다 = 국외 이전.
+    #   [필수] 동의(전문을 끝까지 읽음)가 없으면 **보내기 전에** 400 으로 막는다.
+    xf = body.get("consent_xfer") is True
+    xr = consent.XFER in (body.get("read_full") or [])
+    if not (xf and xr):
+        why = ("[필수] 개인정보 국외 이전 동의(메일 발송 — SendGrid, 미국)에 체크해 주시오."
+               if not xf else "국외 이전 동의 전문을 끝까지 읽지 않으셨소.")
+        return JSONResponse({"ok": False, "need_xfer": True, "msg": why}, status_code=400)
+    try:
+        consent.log("agree", _st.get("cid") or consent.new_cid(), [consent.XFER], [consent.XFER])
+    except Exception as e:
+        print("[consent] 국외 이전 동의 기록 실패:", e, flush=True)
     name = (body.get("name") or "").strip()
     email = (body.get("email") or "").strip()
     phone = (body.get("phone") or "").strip()

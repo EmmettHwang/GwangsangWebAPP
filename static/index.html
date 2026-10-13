@@ -235,6 +235,13 @@
     </div>
     <label class="f" for="ph">휴대전화 <span style="color:var(--muted)">(적지 않으셔도 되오)</span></label>
     <input type="tel" id="ph" placeholder="010-1234-5678">
+    <div class="citem" style="margin-top:14px">
+      <label class="chk" for="cXfer"><input type="checkbox" id="cXfer">
+        <span><b class="req">[필수]</b> 개인정보 국외 이전 동의 (메일 발송 — SendGrid, 미국)</span></label>
+      <button class="sm" id="cXferRead">전문 읽기</button>
+    </div>
+    <div class="cstate" id="cXferState">메일에 얼굴 사진이 실려 미국의 발송 업체로 나가오. 전문을 끝까지 읽고 [동의합니다] 를 누르시면 체크되오.
+      동의하지 않으셔도 화면의 감정서는 그대로 보실 수 있소.</div>
     <div class="hint" style="margin-top:10px">
       <a href="#" id="lnkNotice" style="color:var(--brand)">개인정보 수집·이용 안내 보기</a> ·
       아래 버튼을 누르시면 <b>안내에 동의하신 것으로 봅니다.</b>

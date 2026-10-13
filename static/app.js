@@ -141,6 +141,28 @@ $('cAgeRead').onclick = async () => {
 };
 $('cAge').onchange = paintConsentForm;
 
+/* 메일 단계 — [필수] 국외 이전 동의. 첫 화면 사진 동의와 같은 방식이다. */
+function paintXfer() {
+  const ok = $('cXfer').checked, st = $('cXferState');
+  st.innerHTML = ok ? '✅ 전문을 끝까지 읽고 동의하셨소.'
+    : '메일에 얼굴 사진이 실려 미국의 발송 업체로 나가오. 전문을 끝까지 읽고 [동의합니다] 를 누르시면 체크되오. '
+      + '동의하지 않으셔도 화면의 감정서는 그대로 보실 수 있소.';
+  st.classList.toggle('ok', ok);
+  paint();
+}
+$('cXfer').addEventListener('click', async (e) => {
+  if (!$('cXfer').checked) { paintXfer(); return; }
+  e.preventDefault();
+  const ok = await readTerm('xfer');
+  $('cXfer').checked = ok;
+  paintXfer();
+});
+$('cXferRead').onclick = async () => {
+  const ok = await readTerm('xfer');
+  if (ok) $('cXfer').checked = true;
+  paintXfer();
+};
+
 $('cGo').onclick = async () => {
   $('cGo').disabled = true;
   $('cMsg').innerHTML = '';
@@ -946,12 +968,21 @@ $('keep').onchange = (e) => {
 /* ── 자세히 보고 메일로 받기 ───────────────────────────────── */
 async function finish() {
   if (S.busy) return;
+  if (!$('cXfer').checked) {
+    modal('🌏 국외 이전 동의가 필요하오', `<p>메일에는 감정서와 얼굴 사진이 실려 <b>Twilio SendGrid(미국)</b>를 거쳐 나가오.
+      <b>[필수] 개인정보 국외 이전 동의</b>에 체크하셔야 보내 드릴 수 있소.</p>
+      <p class="hint">동의하지 않으셔도 화면의 감정서는 그대로 보실 수 있소.</p>
+      <div class="cbtns"><button class="pri" id="goXfer">동의하러 가기</button></div>`);
+    $('goXfer').onclick = () => { $('dlg').close(); scrollTo2($('cXfer').closest('.citem')); };
+    return;
+  }
   $('formMsg').innerHTML = '';
   const body = {
     image: S.image, report: S.report, basic: S.basic, model: S.model,
     name: $('nm').value, email: $('em').value, phone: $('ph').value,
     mood: $('mood').value, condition: S.stars ? S.stars + '/5' : '',
     secret: $('secret').value, keep: $('keep').checked,
+    consent_xfer: $('cXfer').checked, read_full: [...C.read].filter(k => k === 'xfer'),
     person_id: (S.person && (S.person.sure || S.person.confirmed)) ? S.person.id : null,
   };
   // 처음 오신 분은 이 칸들이 비어 있다. 그런데 그 칸은 화면 한참 아래에 있어
@@ -994,7 +1025,8 @@ async function finish() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const j = await r.json();
+    let j = {}; try { j = await r.json(); } catch (_) { j = { ok: false, msg: '서버가 ' + r.status + ' 로 답했소' }; }
+    if (j.need_xfer) { $('mailMsg').innerHTML = `<div class="note">📪 보내지 못했소 — ${j.msg}</div>`; $('cXfer').checked = false; paintXfer(); return; }
     if (j.need_consent) { $('mailMsg').innerHTML = `<div class="note">📪 보내지 못했소 — ${j.msg}</div>`; consentLost(); return; }
     $('mailMsg').innerHTML = j.ok
       ? `<div class="good">📬 <b>${$('em').value}</b> 로 감정서를 보냈소.<br>
@@ -1037,7 +1069,8 @@ function paint() {
     //   버튼만 사라졌다. 적으라고 해 놓고 보낼 길이 없는 화면이 된 셈이다.
     //   같은 것을 보고 정하면 둘이 어긋날 수가 없다.
     B.push(['↩️ 처음부터', '', reset, S.busy]);
-    B.push(['🔍 자세히 보고 메일로 받기', 'pri', finish, S.busy]);
+    // 국외 이전 동의(필수)가 없으면 보내는 단추를 끈다 — 메일에 얼굴 사진이 실려 나간다.
+    B.push(['🔍 자세히 보고 메일로 받기', 'pri', finish, S.busy || !$('cXfer').checked]);
   } else {
     // 복사는 감정서 바로 밑에 이미 있다. 액션바에 또 두면 같은 버튼이
     // 화면에 둘이 되어 어느 쪽을 눌러야 하나 망설이게 된다.
