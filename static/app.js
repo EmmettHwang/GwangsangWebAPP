@@ -46,7 +46,7 @@ $('swRec').onchange = (e) => {
     return;
   }
   if (!e.target.checked && C.rec) {
-    fetch('/api/consent/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    fetch('api/consent/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ what: 'rec' }) }).catch(() => {});
     C.rec = false;
   }
@@ -167,7 +167,7 @@ $('cGo').onclick = async () => {
   $('cGo').disabled = true;
   $('cMsg').innerHTML = '';
   try {
-    const r = await fetch('/api/consent', {
+    const r = await fetch('api/consent', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: { photo: $('cPhoto').checked, age14: $('cAge').checked },
                              read_full: [...C.read] }),
@@ -194,7 +194,7 @@ async function askRec() {
   const ok = await readTerm('rec');
   if (!ok) return;
   try {
-    const r = await fetch('/api/consent', {
+    const r = await fetch('api/consent', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: { rec: true }, read_full: [...C.read] }),
     });
@@ -223,7 +223,7 @@ $('lnkWithdraw').onclick = (e) => {
   $('wYes').onclick = async () => {
     $('wYes').disabled = true;
     try {
-      const r = await fetch('/api/consent/withdraw', { method: 'POST',
+      const r = await fetch('api/consent/withdraw', { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!r.ok) throw new Error('서버가 ' + r.status + ' 로 답했소');
       want.rec = false; saveWant();
@@ -268,7 +268,7 @@ async function loadConsent() {
     }
   }, 1500);
   try {
-    const r = await fetch('/api/consent', { cache: 'no-store' });
+    const r = await fetch('api/consent', { cache: 'no-store' });
     const j = await r.json();
     C.terms = j;
     clearTimeout(guard);
@@ -298,7 +298,7 @@ $('btnAbout').onclick = () => modal('🧙‍♂️ 웰니스 관상 ‘아솔’
 <hr><p style="color:#8f807c;font-size:13px">🧙‍♂️ 웰니스 관상 아솔 © 2026 · Powered by 사내 LLM 서버</p>`);
 
 let NOTICE = null;
-fetch('/api/notice').then(r => r.json()).then(j => { NOTICE = j; }).catch(() => {});
+fetch('api/notice').then(r => r.json()).then(j => { NOTICE = j; }).catch(() => {});
 const md = (t) => (t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
   .replace(/^\s*[-·]\s?/gm, '• ').replace(/\n/g, '<br>');
@@ -453,7 +453,7 @@ async function prepare() {
   $('faceNote').innerHTML = '<div class="hint">아솔이 살펴보는 중이오…</div>';
   paint();
   try {
-    const r = await fetch('/api/prepare', {
+    const r = await fetch('api/prepare', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: S.image, recognize: want.rec && C.rec }),
     });
@@ -569,13 +569,13 @@ async function loadAlbum() {
 
   let j = null;
   try {
-    const r = await fetch('/api/album?token=' + encodeURIComponent(tok));
+    const r = await fetch('api/album?token=' + encodeURIComponent(tok));
     j = await r.json();
   } catch (e) { return; }
   if (!j || !j.ok) return;
 
   const list = (j.frames || []).map(f => ({
-    src: `/api/album/frame?token=${encodeURIComponent(tok)}&id=${f.id}`,
+    src: `api/album/frame?token=${encodeURIComponent(tok)}&id=${f.id}`,
     date: f.ts, days: f.days, today: false,
   }));
   // 오늘 담긴 얼굴을 **맨 뒤에** 붙인다. 마지막 장이 오늘이어야 "그동안"이
@@ -691,7 +691,7 @@ async function startVerify() {
   const c = S.candidate; if (!c) return;
   modal('🤫 둘만 아는 이야기', '<p>장군신이 물을 말을 고르는 중이오…</p>');
   try {
-    const r = await fetch('/api/verify/start', {
+    const r = await fetch('api/verify/start', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ person_id: c.id, image: S.image }),
     });
@@ -725,7 +725,7 @@ function askQuestions(token, qs) {
 async function sendAnswers(token, answers) {
   $('dlgBody').innerHTML = '<p>맞춰 보는 중이오…</p>';
   try {
-    const r = await fetch('/api/verify/answer', {
+    const r = await fetch('api/verify/answer', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, answers }),
     });
@@ -793,7 +793,7 @@ async function read(detailed) {
   paint();
 
   try {
-    const r = await fetch('/api/read', {
+    const r = await fetch('api/read', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         image: S.image, detailed,
@@ -1021,7 +1021,7 @@ async function finish() {
   // 두었더니 "보냈다"는 말이 함께 사라져 아무 일도 안 일어난 것처럼 보였다.
   $('mailMsg').innerHTML = '<div class="card"><b>📮 메일을 보내는 중이오…</b></div>';
   try {
-    const r = await fetch('/api/finish', {
+    const r = await fetch('api/finish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -1108,3 +1108,29 @@ function scrollTo2(el) {
 
 paint();
 loadConsent();
+
+/* ── 아솔의 서재가 홀로그램 창(iframe)으로 띄웠을 때(2026-10-29) ──────────
+   「← 아솔의 서재」를 누르면 창 안에서 서재를 다시 여는 대신 바깥 서재에
+   「창을 닫아 달라」고 알린다. 받는 쪽도 보낸 곳(origin)을 확인한다.
+   보낼 곳도 서재 두 곳으로만 정한다 — 다른 곳이 담았으면 아무 데도 가지 않는다. */
+if (window.parent !== window) {
+  const homes = ['https://asoul.ssirn.co.kr', 'https://admin.ssirn.co.kr'];
+  const tell = (type, more) => homes.forEach((o) => { try { window.parent.postMessage(Object.assign({ type }, more || {}), o); } catch (err) { } });
+  const closeMe = (esc) => { try { stopCam(); } catch (err) { } tell('close-gwansang', { esc: !!esc }); };
+  /* 사진을 받은 뒤(풀이 중·풀이를 본 뒤)는 「바쁨」 — 서재가 Esc·바깥 누르기로 닫기 전에 한 번 묻는다(2026-10-29 교수아빠).
+     처음부터(reset)는 페이지를 다시 여니 저절로 「한가함」으로 돌아간다 */
+  let busy = false;
+  setInterval(() => { const b = !!S.image; if (b !== busy) { busy = b; tell('gwansang-busy', { busy }); } }, 500);
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a.to-study');
+    if (!a) return;
+    e.preventDefault();
+    closeMe();
+  });
+  /* 창 안에 손이 가 있으면 Esc 가 바깥 서재에 닿지 않는다 — 열린 대화창이 없을 때만 대신 알린다 */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.querySelector('dialog[open]')) closeMe(true);
+  });
+  /* 다 그려졌다는 알림 — 서재는 이것이 오지 않으면 「못 열렸다」고 말한다 */
+  tell('gwansang-ready');
+}

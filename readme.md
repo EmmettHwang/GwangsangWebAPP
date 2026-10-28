@@ -1,12 +1,12 @@
 # 관상가 아솔 (GwangsangWebAPP)
 
-**v4.4.0** (2026-10-13) · FastAPI + 손으로 짠 화면
+**v4.5.1** (2026-10-29) · FastAPI + 손으로 짠 화면
 
 사진 한 장으로 관상을 풀이해 주는 웹앱. 조선 팔도를 떠돌던 전설의 관상가
 '아솔'이 얼굴을 보고 성별·나이대·직업을 짚어 준 뒤 관상 풀이를 들려준다.
 다시 찾아오면 **얼굴로 알아보고** 지난 기록과 견주어 준다.
 
-- 배포: https://asoul.ssirn.co.kr (svr3, Cloudflare 터널)
+- 배포: https://asoul.ssirn.co.kr/gwansang/ (svr3, Cloudflare 터널 · 「아솔의 서재」 안 「서비스」 탭) · 옛 주소 https://gwansang.ssirn.co.kr/ 도 그대로
 - AI 백엔드: **사내 LLM 서버** (OpenAI 호환 API, 비전 모델 `gemma3:27b`)
 - 판번호는 `server.py` 의 `__version__` **한 군데**에만 있다.
   `/` 가 `index.html` 을 내보낼 때 `{{VERSION}}` 자리에 채워 넣는다 — v4.2.0 까지는
@@ -168,6 +168,22 @@ SMTP_MODE=starttls        # starttls | ssl | plain
 - 얼굴이 가운데보다 위에 있어 세로로 자를 때 위를 조금 더 남긴다(0.38).
 
 ## 변경 이력
+
+### v4.5.1 (2026-10-29) — 서재의 홀로그램 창(iframe) 안에서 돈다
+- 교수아빠: 「관상 보기도 나가지 말고 홀로그램 판에서 여기서 직접 실행해 줘」. 서재가 관상을 창 안 iframe 으로 띄운다.
+- 첫 화면에 `Content-Security-Policy: frame-ancestors 'self' https://asoul.ssirn.co.kr https://admin.ssirn.co.kr` — 전에는 아무 사이트나 담을 수 있었다.
+- 창 안일 때: 「← 아솔의 서재」·Esc 는 서재에 `close-gwansang` 을, 다 그려지면 `gwansang-ready` 를, 사진을 받은 뒤에는 `gwansang-busy` 를 보낸다(받는 곳은 서재 두 주소뿐).
+- 서재는 바쁠 때 Esc·바깥 누르기로 닫기 전에 「닫을까요?」를 묻는다 — 풀이 도중 실수로 닫혀 결과를 잃지 않게.
+- 검증: svr1 브라우저(1920·390, HQ·공개 서재)에서 열기·닫기 · 오류 0.
+
+### v4.5.0 (2026-10-28) — 하위 경로 /gwansang 에서도 돈다 (아솔의 서재 「서비스」 탭)
+- 교수아빠: asoul.ssirn.co.kr 첫 화면은 「아솔의 서재」가 되고, 관상은 그 안의 「서비스」 탭으로 들어간다.
+  터널이 `asoul.ssirn.co.kr/gwansang…` 만 이 앱으로 보낸다(앞자리를 떼지 않는다).
+- `server._Prefix`(ASGI): `/gwansang/…` 의 앞자리를 떼어 같은 길로 받는다 · `/gwansang` → 308 `/gwansang/`.
+  루트(`/`)로 오는 옛 주소(gwansang.ssirn.co.kr)도 그대로 돈다.
+- 화면의 주소를 전부 **상대 주소**로(`api/…` `static/…` `privacy` `terms` `./`) — 어느 자리에 있든 제 앱을 부른다.
+- 서재로 들어왔을 때만 위에 「← 아솔의 서재」 단추(서버가 `{{BACK}}` 자리에 넣는다 · 깜빡임 없음).
+- 동의 쿠키는 그대로 `path=/` — 옮기기 전에 asoul 에서 받은 동의가 /gwansang/ 에서도 산다.
 
 ### v4.4.0 (2026-10-13) — 메일 보내기 전 [필수] 국외 이전 동의
 

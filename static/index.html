@@ -11,11 +11,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="static/app.css">
 </head>
 <body>
 
 <div class="wrap">
+{{BACK}}
 
   <!-- ── 유틸바 ────────────────────────────────────── -->
   <div class="util">
@@ -61,8 +62,8 @@
     <button class="pri wide" id="cGo" disabled style="margin-top:14px">동의하고 시작하기</button>
     <div id="cMsg"></div>
     <div class="hint" style="margin-top:10px">
-      <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
-      <a href="/terms" target="_blank" rel="noopener">이용약관</a> ·
+      <a href="privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
+      <a href="terms" target="_blank" rel="noopener">이용약관</a> ·
       동의하지 않으시면 이 서비스를 쓰실 수 없을 뿐, 다른 불이익은 없소.
     </div>
   </div>
@@ -251,8 +252,8 @@
 
   <!-- ── 바닥글 — 처리방침·약관은 언제든 닿아야 한다 ─────── -->
   <footer class="foot">
-    <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
-    <a href="/terms" target="_blank" rel="noopener">이용약관</a>
+    <a href="privacy" target="_blank" rel="noopener">개인정보처리방침</a> ·
+    <a href="terms" target="_blank" rel="noopener">이용약관</a>
     <span id="footWithdraw" class="hidden"> · <a href="#" id="lnkWithdraw">동의 철회</a></span>
     <br>운영 지기술(G-TECH) · 개인정보 보호책임자 황동하 교수 ·
     <a href="mailto:dhhwang@wsu.ac.kr">dhhwang@wsu.ac.kr</a>
@@ -285,6 +286,6 @@
   <div class="body" id="dlgBody"></div>
 </dialog>
 
-<script src="/static/app.js"></script>
+<script src="static/app.js"></script>
 </body>
 </html>

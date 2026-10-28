@@ -38,7 +38,7 @@ from PIL import Image
 load_dotenv()
 
 # 판번호는 여기 하나뿐이다. 화면(static/index.html)과 readme 가 이것을 따른다.
-__version__ = "4.4.0"
+__version__ = "4.5.1"
 
 import consent
 import faceutil
@@ -52,6 +52,44 @@ STATIC = os.path.join(HERE, "static")
 
 app = FastAPI(title="웰니스 관상 아솔")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+# ── 하위 경로 /gwansang (v4.5.0 · 2026-10-28) ─────────────────────────
+# asoul.ssirn.co.kr 첫 화면이 「아솔의 서재」(captain_app)가 되고, 관상은 그 안의
+# 「서비스」 탭 → asoul.ssirn.co.kr/gwansang/ 으로 들어온다. 터널(cloudflared)이
+# 같은 호스트의 /gwansang… 만 이 컨테이너로 보낸다(앞자리를 떼지 않고 그대로).
+# 여기서 앞자리를 떼어 **같은 길(/ · /api/… · /static/…)로 둘 다** 받는다 —
+# gwansang.ssirn.co.kr/ 같은 옛 주소도 그대로 산다. 화면은 상대 주소(api/…)를 쓴다.
+# root_path 는 건드리지 않는다(StaticFiles 가 그 값으로 파일 길을 다시 계산해 어긋난다).
+PREFIX = "/gwansang"
+
+
+class _Prefix:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            p = scope.get("path") or ""
+            if p == PREFIX and scope["type"] == "http":
+                # /gwansang → /gwansang/ (상대 주소가 제자리를 찾게) · 쿼리는 그대로
+                q = scope.get("query_string") or b""
+                loc = (PREFIX + "/" + ("?" + q.decode("latin-1") if q else "")).encode("latin-1")
+                await send({"type": "http.response.start", "status": 308,
+                            "headers": [(b"location", loc), (b"content-length", b"0")]})
+                await send({"type": "http.response.body", "body": b""})
+                return
+            if p.startswith(PREFIX + "/"):
+                scope = dict(scope)
+                scope["path"] = p[len(PREFIX):]
+                rp = scope.get("raw_path")
+                if rp and rp.startswith(PREFIX.encode() + b"/"):
+                    scope["raw_path"] = rp[len(PREFIX):]
+                scope["gw_prefix"] = PREFIX
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_Prefix)
 
 
 @app.on_event("startup")
@@ -910,7 +948,7 @@ async def healthz():
 
 
 @app.get("/")
-async def index():
+async def index(req: Request):
     """첫 페이지. **화면 파일에 판번호를 붙여 내보낸다.**
 
     붙이지 않았더니 고쳐 올려도 브라우저가 예전 app.js 를 그대로 썼다.
@@ -926,8 +964,16 @@ async def index():
     #   v4.2.0 을 올렸는데 화면만 v4.1.0 으로 남았다(배포 뒤 확인에서 잡았다).
     #   판번호가 두 군데면 언젠가 반드시 어긋난다.
     html = html.replace("{{VERSION}}", __version__)
-    html = (html.replace('href="/static/app.css"', 'href="/static/app.css?v=%s"' % ver)
-                .replace('src="/static/app.js"', 'src="/static/app.js?v=%s"' % ver))
+    # 아솔의 서재(asoul.ssirn.co.kr/gwansang/)로 들어왔으면 서재로 돌아가는 길을 **서버가** 넣는다
+    # (스크립트로 나중에 보이게 하면 화면이 한 번 밀린다). 옛 주소(gwansang.ssirn.co.kr/)엔 없다.
+    back = ('<a class="to-study" href="/" title="아솔의 서재로 돌아가기">← 아솔의 서재</a>'
+            if req.scope.get("gw_prefix") else "")
+    html = html.replace("{{BACK}}", back)
+    html = (html.replace('href="static/app.css"', 'href="static/app.css?v=%s"' % ver)
+                .replace('src="static/app.js"', 'src="static/app.js?v=%s"' % ver))
     from fastapi.responses import HTMLResponse
+    # 아솔의 서재가 이 화면을 홀로그램 창(iframe)으로 띄운다(2026-10-29). 담을 수 있는 곳은
+    # 서재 두 곳(공개 asoul · HQ admin)과 자기 자신뿐 — 그 밖의 사이트가 몰래 담지 못하게.
     return HTMLResponse(html, headers={
-        "Cache-Control": "no-store, must-revalidate", "Pragma": "no-cache"})
+        "Cache-Control": "no-store, must-revalidate", "Pragma": "no-cache",
+        "Content-Security-Policy": "frame-ancestors 'self' https://asoul.ssirn.co.kr https://admin.ssirn.co.kr"})

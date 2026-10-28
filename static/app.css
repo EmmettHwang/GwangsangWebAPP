@@ -310,3 +310,9 @@ dialog.work::backdrop { background: rgba(45,32,30,.62); }
 .sw input:disabled + i { opacity: .45; }
 .sw:has(input:disabled) { cursor: default; color: var(--muted); }
 #consentCard a, dialog a { color: var(--brand); }
+
+/* ── 아솔의 서재로 돌아가기 (v4.5.0) — asoul.ssirn.co.kr/gwansang/ 으로 들어왔을 때만 서버가 넣는다 ── */
+.to-study { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; margin: 0 0 10px;
+  border-radius: 999px; border: 1px solid rgba(224,184,119,.45); background: rgba(224,184,119,.10);
+  color: inherit; text-decoration: none; font-size: 14px; font-weight: 500; }
+.to-study:hover, .to-study:focus-visible { background: rgba(224,184,119,.22); }
